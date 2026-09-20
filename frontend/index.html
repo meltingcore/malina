@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Malina</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Malina">
+          <span class="brand-mark"><img src="/raspberries.png" alt=""></span>
+          <strong>Malina</strong>
+          <span class="version-badge">v0.1</span>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="Main sections">
+          <button id="backup-tab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="backup-view" data-view="backup-view">Backup</button>
+          <button id="restore-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="restore-view" data-view="restore-view">Restore</button>
+          <button id="jobs-tab" class="tab jobs-tab" type="button" role="tab" aria-selected="false" aria-controls="jobs-view" data-view="jobs-view">Jobs <span id="jobs-count" class="tab-count hidden">0</span></button>
+        </nav>
+        <button id="help-button" class="help-button" type="button" aria-label="How to use Malina" title="How to use Malina">?</button>
+      </header>
+
+      <main class="workspace">
+        <section id="backup-view" class="view active" role="tabpanel" aria-labelledby="backup-tab">
+          <div class="page-heading">
+            <h1>Remote SD Card Backup</h1>
+            <p>Create a compressed, bit-for-bit image from your Raspberry Pi over SSH.</p>
+          </div>
+
+          <form id="backup-form" class="workflow-card">
+            <div class="backup-columns">
+              <section class="workflow-column" aria-labelledby="connection-heading">
+                <div class="step-heading">
+                  <span class="step-number">1</span>
+                  <h2 id="connection-heading">Source device</h2>
+                </div>
+                <div class="host-grid">
+                  <label class="field">
+                    <span>Raspberry Pi host</span>
+                    <span class="input-with-icon">
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9l3 3-3 3m5 0h4"/></svg>
+                      <input id="host" placeholder="pi@raspberrypi.local" required autocomplete="off" spellcheck="false">
+                    </span>
+                  </label>
+                  <label class="field port-field">
+                    <span>Port</span>
+                    <input id="port" type="number" value="22" min="1" max="65535" inputmode="numeric">
+                  </label>
+                </div>
+                <fieldset class="auth-fieldset">
+                  <legend>Authentication</legend>
+                  <div class="segmented auth-segmented">
+                    <label><input type="radio" name="auth-method" value="key" checked><span>SSH key</span></label>
+                    <label><input type="radio" name="auth-method" value="password"><span>Password</span></label>
+                  </div>
+                </fieldset>
+                <div id="key-auth" class="auth-panel">
+                  <div class="picker compact-picker">
+                    <div class="picker-value">
+                      <span class="picker-label">Private key</span>
+                      <strong id="identity-display">Default SSH key or agent</strong>
+                    </div>
+                    <button id="choose-key" class="button secondary compact action-button" type="button">Choose…</button>
+                  </div>
+                </div>
+                <div id="password-auth" class="auth-panel hidden">
+                  <div class="picker compact-picker password-picker">
+                    <label class="password-value" for="password">
+                      <span class="picker-label">SSH password</span>
+                      <input id="password" type="password" autocomplete="current-password" placeholder="Enter password">
+                    </label>
+                    <button id="toggle-password" class="button secondary compact action-button" type="button" aria-pressed="false">Show</button>
+                  </div>
+                </div>
+                <div class="connection-line">
+                  <div id="pi-result" class="connection-status muted-status" role="status">
+                    <span class="mini-dot" aria-hidden="true"></span>
+                    <span>Test the connection to identify the source disk.</span>
+                  </div>
+                  <div class="connection-actions">
+                    <button id="cancel-inspect" class="cancel-inspect hidden" type="button" aria-label="Cancel connection check" title="Cancel connection check"><span aria-hidden="true">×</span> Cancel</button>
+                    <button id="inspect-pi" class="text-button action-button" type="button"><span aria-hidden="true">↻</span> Test connection</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="workflow-column destination-column" aria-labelledby="location-heading">
+                <div class="step-heading">
+                  <span class="step-number">2</span>
+                  <h2 id="location-heading">Destination</h2>
+                </div>
+                <span class="field-label">Local backup folder</span>
+                <div class="picker folder-picker">
+                  <svg class="picker-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3zM3 7V5h7l2 2h9"/></svg>
+                  <div class="picker-value"><strong id="output-display">Choose a folder</strong></div>
+                  <button id="choose-output" class="button secondary compact action-button" type="button">Choose…</button>
+                </div>
+              </section>
+            </div>
+            <div class="workflow-action">
+              <button class="button primary large action-button" type="submit"><span aria-hidden="true">→</span> Start Backup</button>
+              <p id="backup-estimate">Live consistency mode · gzip compression</p>
+            </div>
+          </form>
+          <footer class="page-footer">
+            <span><span aria-hidden="true">♢</span> Malina reads the source device and never writes to it.</span>
+            <span class="footer-state">Ready</span>
+          </footer>
+        </section>
+
+        <section id="jobs-view" class="view jobs-view" role="tabpanel" aria-labelledby="jobs-tab" hidden>
+          <div class="jobs-heading">
+            <div>
+              <span class="jobs-eyebrow">Operational queue</span>
+              <h1>Active &amp; Recent Jobs</h1>
+              <p>Monitor backups and restores while you continue using Malina.</p>
+            </div>
+            <div id="jobs-summary" class="jobs-summary"><span></span> No active jobs</div>
+          </div>
+          <div class="jobs-toolbar">
+            <div class="job-filters" role="group" aria-label="Filter jobs">
+              <button class="job-filter active" type="button" data-job-filter="all">All <span id="all-job-count">0</span></button>
+              <button class="job-filter" type="button" data-job-filter="active">Active <span id="active-job-count">0</span></button>
+              <button class="job-filter" type="button" data-job-filter="completed">Finished <span id="finished-job-count">0</span></button>
+            </div>
+            <label class="job-search">
+              <span class="sr-only">Search jobs</span>
+              <span aria-hidden="true">⌕</span>
+              <input id="job-search" type="search" placeholder="Search jobs or devices…">
+            </label>
+          </div>
+          <div id="jobs-list" class="jobs-list"></div>
+          <div id="jobs-empty" class="jobs-empty">
+            <span class="jobs-empty-icon" aria-hidden="true">↕</span>
+            <strong>No jobs yet</strong>
+            <span>Start a backup or restore and it will appear here.</span>
+          </div>
+          <footer class="page-footer jobs-footer">
+            <span><span aria-hidden="true">♢</span> Jobs continue while their details are hidden.</span>
+            <span class="footer-state">Ready</span>
+          </footer>
+        </section>
+
+        <div id="job-details-overlay" class="job-modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="pipeline-title" aria-describedby="pipeline-subtitle" hidden>
+          <section class="job-modal">
+          <article id="live-panel" class="live-panel">
+            <div class="stream-route">
+              <span class="stream-device-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M7 3h8l3 3v15H7zM10 4v4m3-4v4m3-2h2M10 17h5"/></svg>
+              </span>
+              <div class="stream-route-copy">
+                <strong><span id="progress-source">Raspberry Pi disk</span> <span aria-hidden="true">→</span> <span id="progress-destination">disk.img.gz</span></strong>
+                <small id="progress-stage">Establishing SSH connection</small>
+              </div>
+              <span id="stream-state" class="stream-state"><span></span> Connecting</span>
+            </div>
+
+            <div class="progress-overview">
+              <div><strong id="progress-percent">0%</strong><span id="progress-rate">Waiting for data</span></div>
+              <div class="eta"><span>Estimated remaining</span><strong id="progress-eta">Calculating…</strong></div>
+            </div>
+            <div id="progress-track" class="progress-track" role="progressbar" aria-label="Backup progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span id="progress-track-fill"></span>
+            </div>
+            <div class="progress-validation">
+              <span id="progress-byte-detail">Waiting for source size</span>
+            </div>
+
+            <div class="metric-grid">
+              <div class="metric"><span>Transferred</span><strong id="metric-transferred">0 B</strong><small id="metric-total">of —</small></div>
+              <div class="metric"><span>Throughput</span><strong id="metric-throughput">—</strong><small>Current stream rate</small></div>
+              <div class="metric"><span id="metric-mode-label">Compression</span><strong id="metric-mode">gzip</strong><small id="metric-mode-detail">Fast streaming mode</small></div>
+              <div class="metric"><span id="metric-access-label">Source access</span><strong id="metric-access">Read only</strong><small id="metric-access-detail">Live consistency</small></div>
+            </div>
+
+            <div class="activity-log" aria-label="Backup activity">
+              <div class="activity-log-heading"><span>⌁ Pipeline activity</span><span id="activity-time">00:00</span></div>
+              <p id="activity-primary">Opening secure connection…</p>
+              <p id="activity-secondary">The source disk is never modified by Malina.</p>
+              <p id="activity-bytes">0 bytes received</p>
+            </div>
+
+            <div class="progress-controls">
+              <button id="pause-job" class="progress-button" type="button"><span aria-hidden="true">Ⅱ</span> <span id="pause-label">Pause Job</span></button>
+              <button id="background-job" class="progress-button" type="button"><span aria-hidden="true">↙</span> Background</button>
+              <button id="cancel-job" class="progress-button cancel" type="button"><span aria-hidden="true">×</span> <span id="cancel-label">Cancel Job</span></button>
+            </div>
+
+            <div id="cancel-confirm" class="cancel-confirm hidden" role="alertdialog" aria-modal="true" aria-labelledby="cancel-confirm-title" aria-describedby="cancel-confirm-copy">
+              <div class="cancel-confirm-card">
+                <span class="cancel-confirm-icon" aria-hidden="true">×</span>
+                <h2 id="cancel-confirm-title">Cancel this job?</h2>
+                <p id="cancel-confirm-copy">The running operation will be stopped.</p>
+                <div>
+                  <button id="keep-job" class="confirm-button secondary" type="button">Keep Running</button>
+                  <button id="confirm-cancel-job" class="confirm-button danger" type="button">Cancel Job</button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <footer class="progress-footer"><span aria-hidden="true">♢</span> <span id="progress-footer-copy">Partial backup data is removed automatically if the stream is cancelled.</span></footer>
+          </section>
+        </div>
+
+        <section id="restore-view" class="view" role="tabpanel" aria-labelledby="restore-tab" hidden>
+          <div class="page-heading">
+            <h1>Restore Backup to Drive</h1>
+            <p>Select a verified Malina image and the removable drive to overwrite.</p>
+          </div>
+          <form id="restore-form" class="workflow-card">
+            <div class="backup-columns restore-columns">
+              <section class="workflow-column" aria-labelledby="backup-heading">
+                <div class="step-heading">
+                  <span class="step-number">1</span>
+                  <h2 id="backup-heading">Image</h2>
+                  <span id="backup-ready" class="ready-label hidden">✓ Ready</span>
+                </div>
+                <span class="field-label">Backup image</span>
+                <div class="picker folder-picker image-picker restore-picker">
+                  <svg class="picker-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/></svg>
+                  <div id="selected-backup" class="picker-value selected-backup empty-selection">
+                    <span class="picker-label">Malina backup folder</span>
+                    <strong class="backup-title">Choose a backup image</strong>
+                    <small class="backup-meta">No image selected</small>
+                  </div>
+                  <button id="choose-backup" class="button secondary compact action-button" type="button">Choose…</button>
+                </div>
+                <div class="image-picker-note"><span aria-hidden="true">◇</span> <span id="backup-checksum">SHA-256 checked before write</span></div>
+              </section>
+
+              <section class="workflow-column destination-column" aria-labelledby="destination-heading">
+                <div class="step-heading">
+                  <span class="step-number">2</span>
+                  <h2 id="destination-heading">Target</h2>
+                </div>
+                <span class="field-label">Removable drive</span>
+                <div class="picker folder-picker restore-picker target-picker">
+                  <svg class="picker-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h8l3 3v15H7zM10 4v4m3-4v4m3-2h2M10 17h5"/></svg>
+                  <label class="picker-value" for="device">
+                    <span class="picker-label">Target device</span>
+                    <select id="device" required aria-label="Removable drive"><option value="">Choose a removable drive</option></select>
+                  </label>
+                  <button id="refresh-devices" class="button secondary compact action-button" type="button" aria-label="Refresh removable drives" title="Refresh removable drives">Refresh</button>
+                </div>
+                <div class="image-picker-note"><span aria-hidden="true">◇</span> <span id="target-detail">Removable drives only</span></div>
+                <label class="simple-option check-row restore-verify-option">
+                  <input id="verify-write" type="checkbox">
+                  <span><strong>Verify after writing</strong><small>Read the device back and check every byte · auto-eject on completion.</small></span>
+                </label>
+              </section>
+            </div>
+            <div class="workflow-action restore-action">
+              <button id="restore-button" class="button destructive large action-button" type="submit" disabled><span aria-hidden="true">↯</span> Erase Drive &amp; Restore</button>
+              <p id="restore-warning">The selected drive and all its partitions will be overwritten.</p>
+            </div>
+          </form>
+          <footer class="page-footer centered-footer"><span>Malina · Backup checksum verified before writing</span></footer>
+        </section>
+
+        <div id="restore-confirm-overlay" class="restore-confirm-layer hidden" role="alertdialog" aria-modal="true" aria-labelledby="restore-confirm-title" aria-describedby="restore-confirm-copy" hidden>
+          <section class="restore-confirm-card">
+            <span class="restore-confirm-icon" aria-hidden="true">↯</span>
+            <span class="restore-confirm-eyebrow">Destructive operation</span>
+            <h2 id="restore-confirm-title">Erase this drive and restore?</h2>
+            <p id="restore-confirm-copy">Review the image and destination before continuing.</p>
+            <div class="restore-confirm-summary">
+              <div><span>Image</span><strong id="restore-confirm-image">No image selected</strong></div>
+              <span aria-hidden="true">→</span>
+              <div><span>Target drive</span><strong id="restore-confirm-target">No drive selected</strong></div>
+            </div>
+            <p class="restore-confirm-warning">All existing data and partitions on the target drive will be permanently overwritten.</p>
+            <div class="restore-confirm-actions">
+              <button id="cancel-restore-confirm" class="confirm-button secondary" type="button">Go Back</button>
+              <button id="confirm-restore" class="confirm-button danger" type="button">Erase &amp; Restore</button>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <div id="help-overlay" class="help-layer hidden" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-describedby="help-copy" hidden>
+        <section class="help-card">
+          <button id="close-help" class="help-close" type="button" aria-label="Close help" title="Close">×</button>
+          <span class="help-icon" aria-hidden="true">?</span>
+          <h2 id="help-title">How to use Malina</h2>
+          <div id="help-copy" class="help-copy">
+            <p>To create a backup, enter the Raspberry Pi SSH address, choose an authentication method and destination folder, test the connection, then start the backup.</p>
+            <p>To restore, choose a Malina image and removable target drive, then review the erase confirmation carefully.</p>
+            <p>Use Jobs to monitor, pause, resume, or cancel operations. Jobs continue when their details are closed.</p>
+          </div>
+        </section>
+      </div>
+
+      <section id="operation" class="operation hidden" aria-live="polite">
+        <div class="operation-copy">
+          <strong id="operation-title">Working</strong>
+          <span id="operation-detail"></span>
+        </div>
+        <progress id="operation-progress" max="1"></progress>
+        <button id="operation-close" class="operation-close" type="button" aria-label="Dismiss notification" title="Dismiss">×</button>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

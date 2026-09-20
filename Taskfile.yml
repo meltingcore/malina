@@ -1,0 +1,58 @@
+version: '3'
+
+vars:
+  APP_NAME: malina
+  BIN_DIR: bin
+  PACKAGE_MANAGER: pnpm
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  GOOS: '{{.GOOS | default OS}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the native desktop application
+    cmds:
+      - task: '{{.GOOS}}:build'
+
+  package:
+    summary: Packages a production desktop application
+    cmds:
+      - task: '{{.GOOS}}:package'
+
+  run:
+    summary: Runs the native desktop application
+    cmds:
+      - task: '{{.GOOS}}:run'
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  cli:build:
+    summary: Builds the command-line application
+    cmds:
+      - go build -o "{{.BIN_DIR}}/cli/" ./cmd/malina
+
+  test:
+    summary: Runs Go and frontend checks
+    deps:
+      - task: common:install:frontend:deps
+    cmds:
+      - go test ./...
+      - task: common:frontend:run
+        vars:
+          SCRIPT: check
+
+  setup:docker:
+    cmds:
+      - task: common:setup:docker
+
+  install:msix:tools:
+    cmds:
+      - task: windows:install:msix:tools

@@ -1,0 +1,130 @@
+package desktop
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/meltingcore/malina/internal/core"
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
+
+type Service struct {
+	app         *application.App
+	engine      *core.Engine
+	operation   sync.Mutex
+	jobsMu      sync.RWMutex
+	jobs        map[string]*managedJob
+	jobSequence uint64
+	appCtx      context.Context
+}
+
+func NewService(app *application.App, engine *core.Engine) *Service {
+	return &Service{app: app, engine: engine, jobs: make(map[string]*managedJob), appCtx: context.Background()}
+}
+
+func (s *Service) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	s.jobsMu.Lock()
+	s.appCtx = ctx
+	s.jobsMu.Unlock()
+	return nil
+}
+
+func (s *Service) progress() core.ProgressFunc {
+	return func(progress core.Progress) {
+		s.app.Event.Emit("malina:progress", progress)
+	}
+}
+
+func (s *Service) DefaultBackupDirectory() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "Malina Backups"
+	}
+	return filepath.Join(home, "Malina Backups")
+}
+
+func (s *Service) SelectIdentityFile(_ context.Context, currentPath string) (string, error) {
+	dialog := s.app.Dialog.OpenFile().
+		SetTitle("Choose SSH private key").
+		CanChooseDirectories(false).
+		CanChooseFiles(true).
+		ShowHiddenFiles(true).
+		AllowsOtherFileTypes(true)
+	if currentPath != "" {
+		dialog.SetDirectory(filepath.Dir(currentPath))
+	}
+	path, err := dialog.PromptForSingleSelection()
+	if err != nil {
+		return "", core.WrapError("DIALOG_FAILED", "Could not open the key file picker.", err)
+	}
+	return path, nil
+}
+
+func (s *Service) SelectBackupDirectory(_ context.Context, currentPath string) (string, error) {
+	dialog := s.app.Dialog.OpenFile().
+		SetTitle("Choose backup location").
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		CanCreateDirectories(true)
+	if currentPath != "" {
+		dialog.SetDirectory(currentPath)
+	}
+	path, err := dialog.PromptForSingleSelection()
+	if err != nil {
+		return "", core.WrapError("DIALOG_FAILED", "Could not open the folder picker.", err)
+	}
+	return path, nil
+}
+
+func (s *Service) SelectBackup(_ context.Context) (core.Backup, error) {
+	path, err := s.app.Dialog.OpenFile().
+		SetTitle("Choose a Malina backup").
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		PromptForSingleSelection()
+	if err != nil {
+		return core.Backup{}, core.WrapError("DIALOG_FAILED", "Could not open the backup picker.", err)
+	}
+	if path == "" {
+		return core.Backup{}, nil
+	}
+	return core.LoadBackup(path)
+}
+
+func (s *Service) Inspect(ctx context.Context, connection core.Connection) (core.PiInfo, error) {
+	return s.engine.Inspect(ctx, connection)
+}
+
+func (s *Service) Backup(ctx context.Context, request core.BackupRequest) (core.Backup, error) {
+	if !s.operation.TryLock() {
+		return core.Backup{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
+	}
+	defer s.operation.Unlock()
+	return s.engine.Backup(ctx, request, s.progress())
+}
+
+func (s *Service) ListBackups(_ context.Context, directory string) ([]core.Backup, error) {
+	return core.ListBackups(directory)
+}
+
+func (s *Service) Verify(ctx context.Context, backupPath string) (core.VerifyResult, error) {
+	if !s.operation.TryLock() {
+		return core.VerifyResult{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
+	}
+	defer s.operation.Unlock()
+	return s.engine.Verify(ctx, backupPath, s.progress())
+}
+
+func (s *Service) ListDevices(ctx context.Context) ([]core.Device, error) {
+	return s.engine.Devices.List(ctx)
+}
+
+func (s *Service) Restore(ctx context.Context, request core.RestoreRequest) (core.RestoreResult, error) {
+	if !s.operation.TryLock() {
+		return core.RestoreResult{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
+	}
+	defer s.operation.Unlock()
+	return s.engine.Restore(ctx, request, s.progress())
+}

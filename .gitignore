@@ -1,0 +1,14 @@
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+.pnpm-store/
+.task/
+bin/
+build/bin/
+build/android/
+build/ios/
+build/appicon.icon/
+build/darwin/Assets.car
+.DS_Store
+.idea/
+*.partial

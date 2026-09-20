@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Malina
+Comment=Live whole-device backup and restore for Raspberry Pi
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/malina %u
+Terminal=false
+Type=Application
+Icon=malina
+Categories=Utility;
+StartupWMClass=malina
+
+ 

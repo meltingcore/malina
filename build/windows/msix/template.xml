@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="malina"
+        Arguments=""
+        InstallLocation="C:\Program Files\meltingcore\Malina">
+    </Installer>
+    <PackageInformation
+        PackageName="Malina"
+        PackageDisplayName="Malina"
+        PublisherName="CN=meltingcore"
+        PublisherDisplayName="meltingcore"
+        Version="0.1.0.0"
+        PackageDescription="Live whole-device backup and restore for Raspberry Pi">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="com.meltingcore.malina"
+                Description="Live whole-device backup and restore for Raspberry Pi"
+                DisplayName="Malina"
+                ExecutableName="malina"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>Malina</DisplayName>
+            <PublisherDisplayName>meltingcore</PublisherDisplayName>
+            <Description>Live whole-device backup and restore for Raspberry Pi</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="malina.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>
