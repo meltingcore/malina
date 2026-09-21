@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*.*.*"
@@ -15,12 +16,43 @@ concurrency:
 env:
   GO_VERSION: "1.27.x"
   NODE_VERSION: "24"
-  PNPM_VERSION: "10"
+  PNPM_VERSION: "12"
   WAILS_VERSION: "v3.0.0-beta.23"
 
 jobs:
+  metadata:
+    name: Resolve package metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^  version: "\([^"]*\)"/\1/p' build/config.yml)"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error file=build/config.yml::Expected one stable semantic version, found '${version}'."
+            exit 1
+          fi
+          if [[ "${EVENT_NAME}" == "push" && "${REF_NAME#v}" != "${version}" ]]; then
+            echo "::error file=build/config.yml::Tag '${REF_NAME}' does not match application version '${version}'."
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
   linux:
     name: Build Linux amd64
+    needs: metadata
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -36,7 +68,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -63,11 +95,12 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/malina-cli ./cmd/malina
 
       - name: Package Linux release
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p "stage/malina-${version}-linux-amd64" dist
-          cp bin/malina bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${version}-linux-amd64/"
-          tar -C stage -czf "dist/malina-${version}-linux-amd64.tar.gz" "malina-${version}-linux-amd64"
+          mkdir -p "stage/malina-${PACKAGE_VERSION}-linux-amd64" dist
+          cp bin/malina bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${PACKAGE_VERSION}-linux-amd64/"
+          tar -C stage -czf "dist/malina-${PACKAGE_VERSION}-linux-amd64.tar.gz" "malina-${PACKAGE_VERSION}-linux-amd64"
 
       - name: Upload Linux release artifact
         uses: actions/upload-artifact@v7
@@ -80,6 +113,7 @@ jobs:
 
   macos:
     name: Build macOS universal
+    needs: metadata
     runs-on: macos-14
     timeout-minutes: 35
 
@@ -95,7 +129,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -119,12 +153,13 @@ jobs:
           lipo -create -output bin/malina-cli bin/malina-cli-amd64 bin/malina-cli-arm64
 
       - name: Package macOS release
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p "stage/malina-${version}-macos-universal" dist
-          cp -R bin/malina.app "stage/malina-${version}-macos-universal/Malina.app"
-          cp bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${version}-macos-universal/"
-          ditto -c -k --sequesterRsrc --keepParent "stage/malina-${version}-macos-universal" "dist/malina-${version}-macos-universal.zip"
+          mkdir -p "stage/malina-${PACKAGE_VERSION}-macos-universal" dist
+          cp -R bin/malina.app "stage/malina-${PACKAGE_VERSION}-macos-universal/Malina.app"
+          cp bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${PACKAGE_VERSION}-macos-universal/"
+          ditto -c -k --sequesterRsrc --keepParent "stage/malina-${PACKAGE_VERSION}-macos-universal" "dist/malina-${PACKAGE_VERSION}-macos-universal.zip"
 
       - name: Upload macOS release artifact
         uses: actions/upload-artifact@v7
@@ -137,6 +172,7 @@ jobs:
 
   windows:
     name: Build Windows amd64
+    needs: metadata
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -152,7 +188,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -180,12 +216,13 @@ jobs:
 
       - name: Package Windows release
         shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          $stage = "stage/malina-$version-windows-amd64"
+          $stage = "stage/malina-${env:PACKAGE_VERSION}-windows-amd64"
           New-Item -ItemType Directory -Force -Path $stage, dist | Out-Null
           Copy-Item bin/malina.exe, bin/malina-cli.exe, LICENSE, README.md, CHANGELOG.md -Destination $stage
-          Compress-Archive -Path $stage -DestinationPath "dist/malina-$version-windows-amd64.zip"
+          Compress-Archive -Path $stage -DestinationPath "dist/malina-${env:PACKAGE_VERSION}-windows-amd64.zip"
 
       - name: Upload Windows release artifact
         uses: actions/upload-artifact@v7
@@ -198,7 +235,9 @@ jobs:
 
   publish:
     name: Publish GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs:
+      - metadata
       - linux
       - macos
       - windows
@@ -220,13 +259,14 @@ jobs:
 
       - name: Create checksums and release notes
         shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
           cd dist
           sha256sum ./* > SHA256SUMS
           cd ..
-          awk -v version="${version}" '
+          awk -v version="${PACKAGE_VERSION}" '
             $0 == "## [" version "]" || index($0, "## [" version "] - ") == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found && /^\[[^]]+\]:/ { exit }
@@ -237,6 +277,6 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          gh release create "${GITHUB_REF_NAME}" dist/* --verify-tag --title "Malina ${version}" --notes-file release-notes.md
+          gh release create "${GITHUB_REF_NAME}" dist/* --verify-tag --title "Malina ${PACKAGE_VERSION}" --notes-file release-notes.md

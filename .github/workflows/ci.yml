@@ -13,6 +13,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GO_VERSION: "1.27.x"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "12"
+  WAILS_VERSION: "v3.0.0-beta.23"
+
 jobs:
   test:
     name: Test and lint
@@ -54,19 +60,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.27.x"
+          go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
