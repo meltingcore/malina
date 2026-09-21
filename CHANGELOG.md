@@ -1,19 +1,17 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.1]
 
-### Security and reliability
+### Fixes
 
 - Reserve restore targets atomically and revalidate physical media after unmounting.
 - Preserve unknown partial backup directories and allocate collision-free concurrent backup paths.
 - Prefer stable hardware identifiers, exclude fixed MMC/eMMC restore targets, and serialize SSH
   host-key pinning.
 - Gate releases on tests and publish only from matching semantic-version tags.
-
-### Quality
-
-- Add race-focused Go regressions, frontend unit tests, architecture documentation, responsive window
-  controls, keyboard tab navigation, modal focus trapping, and more readable operational text.
+- Add race-focused Go regressions, frontend unit tests, architecture documentation, responsive
+  window controls, keyboard tab navigation, modal focus trapping, and more readable operational
+  text.
 
 ## [0.1.0]
 
