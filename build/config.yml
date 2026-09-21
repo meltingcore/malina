@@ -5,13 +5,13 @@ version: '3'
 
 # This information is used to generate the build assets.
 info:
-  companyName: "meltingcore"
+  companyName: "Melting Core"
   productName: "Malina"
   productIdentifier: "com.meltingcore.malina"
   description: "Live whole-device backup and restore for Raspberry Pi"
   copyright: "Copyright 2026 meltingcore"
   comments: "Malina"
-  version: "0.1.0"
+  version: "0.1.1"
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"
