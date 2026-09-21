@@ -227,7 +227,7 @@ jobs:
           sha256sum ./* > SHA256SUMS
           cd ..
           awk -v version="${version}" '
-            index($0, "## [" version "] - ") == 1 { found = 1; next }
+            $0 == "## [" version "]" || index($0, "## [" version "] - ") == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found && /^\[[^]]+\]:/ { exit }
             found { print }
