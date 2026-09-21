@@ -32,7 +32,7 @@ func main() {
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:              "Malina",
 		Width:              1120,
-		Height:             820,
+		Height:             760,
 		MinWidth:           760,
 		MinHeight:          620,
 		DisableResize:      false,

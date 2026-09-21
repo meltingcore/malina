@@ -98,25 +98,16 @@
                 </div>
               </section>
             </div>
-            <div class="workflow-action">
+          <div class="workflow-action">
               <button class="button primary large action-button" type="submit"><span aria-hidden="true">→</span> Start Backup</button>
-              <p id="backup-estimate">Live consistency mode · gzip compression</p>
             </div>
           </form>
-          <footer class="page-footer">
-            <span><span aria-hidden="true">♢</span> Malina reads the source device and never writes to it.</span>
-            <span class="footer-state">Ready</span>
-          </footer>
         </section>
 
         <section id="jobs-view" class="view jobs-view" role="tabpanel" aria-labelledby="jobs-tab" hidden>
-          <div class="jobs-heading">
-            <div>
-              <span class="jobs-eyebrow">Operational queue</span>
-              <h1>Active &amp; Recent Jobs</h1>
-              <p>Monitor backups and restores while you continue using Malina.</p>
-            </div>
-            <div id="jobs-summary" class="jobs-summary"><span></span> No active jobs</div>
+          <div class="page-heading">
+            <h1>Active &amp; Recent Jobs</h1>
+            <p>Monitor backups and restores while you continue using Malina.</p>
           </div>
           <div class="jobs-toolbar">
             <div class="job-filters" role="group" aria-label="Filter jobs">
@@ -136,10 +127,6 @@
             <strong>No jobs yet</strong>
             <span>Start a backup or restore and it will appear here.</span>
           </div>
-          <footer class="page-footer jobs-footer">
-            <span><span aria-hidden="true">♢</span> Jobs continue while their details are hidden.</span>
-            <span class="footer-state">Ready</span>
-          </footer>
         </section>
 
         <div id="job-details-overlay" class="job-modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="pipeline-title" aria-describedby="pipeline-subtitle" hidden>
@@ -250,13 +237,24 @@
                   <span><strong>Verify after writing</strong><small>Read the device back and check every byte · auto-eject on completion.</small></span>
                 </label>
               </section>
+
+              <div id="manifest-summary" class="manifest-summary hidden" aria-label="Selected backup manifest details">
+                <div class="manifest-summary-heading">
+                  <strong>Manifest details</strong>
+                  <span id="manifest-status">Validated manifest</span>
+                </div>
+                <dl>
+                  <div><dt>Device</dt><dd id="manifest-device">—</dd></div>
+                  <div><dt>System</dt><dd id="manifest-system">—</dd></div>
+                  <div><dt>Source disk</dt><dd id="manifest-disk">—</dd></div>
+                  <div><dt>Archive</dt><dd id="manifest-archive">—</dd></div>
+                </dl>
+              </div>
             </div>
             <div class="workflow-action restore-action">
               <button id="restore-button" class="button destructive large action-button" type="submit" disabled><span aria-hidden="true">↯</span> Erase Drive &amp; Restore</button>
-              <p id="restore-warning">The selected drive and all its partitions will be overwritten.</p>
             </div>
           </form>
-          <footer class="page-footer centered-footer"><span>Malina · Backup checksum verified before writing</span></footer>
         </section>
 
         <div id="restore-confirm-overlay" class="restore-confirm-layer hidden" role="alertdialog" aria-modal="true" aria-labelledby="restore-confirm-title" aria-describedby="restore-confirm-copy" hidden>

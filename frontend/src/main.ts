@@ -27,9 +27,14 @@ const togglePasswordButton = element<HTMLButtonElement>("toggle-password");
 const selectedBackupElement = element<HTMLDivElement>("selected-backup");
 const backupReady = element<HTMLElement>("backup-ready");
 const backupChecksum = element<HTMLElement>("backup-checksum");
+const manifestSummary = element<HTMLElement>("manifest-summary");
+const manifestStatus = element<HTMLElement>("manifest-status");
+const manifestDevice = element<HTMLElement>("manifest-device");
+const manifestSystem = element<HTMLElement>("manifest-system");
+const manifestDisk = element<HTMLElement>("manifest-disk");
+const manifestArchive = element<HTMLElement>("manifest-archive");
 const deviceSelect = element<HTMLSelectElement>("device");
 const targetDetail = element<HTMLElement>("target-detail");
-const restoreWarning = element<HTMLElement>("restore-warning");
 const verifyWriteInput = element<HTMLInputElement>("verify-write");
 const restoreButton = element<HTMLButtonElement>("restore-button");
 const restoreConfirmOverlay = element<HTMLElement>("restore-confirm-overlay");
@@ -47,7 +52,6 @@ const operationDetail = element<HTMLElement>("operation-detail");
 const operationProgress = element<HTMLProgressElement>("operation-progress");
 const operationClose = element<HTMLButtonElement>("operation-close");
 const jobsCount = element<HTMLElement>("jobs-count");
-const jobsSummary = element<HTMLElement>("jobs-summary");
 const jobsList = element<HTMLElement>("jobs-list");
 const jobsEmpty = element<HTMLElement>("jobs-empty");
 const allJobCount = element<HTMLElement>("all-job-count");
@@ -281,6 +285,12 @@ const renderSelectedBackup = (): void => {
     selectedBackupElement.append(label, title, meta);
     backupReady.classList.add("hidden");
     backupChecksum.textContent = "SHA-256 checked before write";
+    manifestSummary.classList.add("hidden");
+    manifestStatus.textContent = "Select an image";
+    manifestDevice.textContent = "—";
+    manifestSystem.textContent = "—";
+    manifestDisk.textContent = "—";
+    manifestArchive.textContent = "—";
     updateRestoreAvailability();
     return;
   }
@@ -298,6 +308,13 @@ const renderSelectedBackup = (): void => {
   selectedBackupElement.append(label, title, meta);
   backupReady.classList.remove("hidden");
   backupChecksum.textContent = "Manifest loaded";
+  manifestSummary.classList.remove("hidden");
+  const manifest = selectedBackup.manifest;
+  manifestStatus.textContent = `Validated · format v${manifest.formatVersion}`;
+  manifestDevice.textContent = [manifest.source.model, manifest.source.hostname].filter(Boolean).join(" · ") || "Unknown device";
+  manifestSystem.textContent = [manifest.source.os, manifest.source.architecture].filter(Boolean).join(" · ") || "Unknown system";
+  manifestDisk.textContent = `${manifest.source.device} · ${formatBytes(manifest.source.bytes)}`;
+  manifestArchive.textContent = `${formatBytes(manifest.image.compressedBytes)} · ${manifest.image.compression}`;
   updateRestoreAvailability();
 };
 
@@ -315,7 +332,6 @@ const renderDevices = (devices: Device[]): void => {
 const updateTargetSummary = (): void => {
   const selected = availableDevices.find((device) => device.id === deviceSelect.value);
   targetDetail.textContent = selected ? `${selected.name} · ${formatBytes(selected.bytes)}` : "No target selected";
-  restoreWarning.textContent = selected ? `${selected.path} and all its partitions will be overwritten.` : "The selected drive and all its partitions will be overwritten.";
 };
 
 const refreshDevices = async (): Promise<void> => { renderDevices((await Service.ListDevices()) ?? []); };
@@ -405,9 +421,6 @@ const renderJobs = (): void => {
   finishedJobCount.textContent = String(finished);
   jobsCount.textContent = String(active.length);
   jobsCount.classList.toggle("hidden", active.length === 0);
-  jobsSummary.classList.toggle("active", active.length > 0);
-  const summaryCopy = jobsSummary.lastChild;
-  if (summaryCopy) summaryCopy.textContent = active.length === 0 ? " No active jobs" : ` ${active.length} active ${active.length === 1 ? "job" : "jobs"}`;
 
   const query = jobSearch.value.trim().toLocaleLowerCase();
   const visible = sorted.filter(({ job }) => {
