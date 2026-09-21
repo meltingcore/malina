@@ -9,10 +9,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as core$0 from "../core/models.js";
 
-export function Backup(request: core$0.BackupRequest): $CancellablePromise<core$0.Backup> {
-    return $Call.ByID(2781755494, request);
-}
-
 export function CancelJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(574686037, id);
 }
@@ -41,10 +37,6 @@ export function PauseJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(552944717, id);
 }
 
-export function Restore(request: core$0.RestoreRequest): $CancellablePromise<core$0.RestoreResult> {
-    return $Call.ByID(2046745482, request);
-}
-
 export function ResumeJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(3427591970, id);
 }
@@ -67,8 +59,4 @@ export function StartBackup(request: core$0.BackupRequest): $CancellablePromise<
 
 export function StartRestore(request: core$0.RestoreRequest): $CancellablePromise<core$0.Job> {
     return $Call.ByID(1353658238, request);
-}
-
-export function Verify(backupPath: string): $CancellablePromise<core$0.VerifyResult> {
-    return $Call.ByID(1909698437, backupPath);
 }

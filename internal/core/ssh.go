@@ -10,19 +10,23 @@ import (
 
 var hostPattern = regexp.MustCompile(`^(?:[a-zA-Z0-9._-]+@)?(?:[a-zA-Z0-9._-]+|\[[0-9a-fA-F:]+\])$`)
 
+// DiskStream is a readable remote process whose exit status must also be checked.
 type DiskStream interface {
 	io.ReadCloser
 	Wait() error
 }
 
+// Remote abstracts Raspberry Pi inspection and whole-disk streaming.
 type Remote interface {
 	Inspect(ctx context.Context, connection Connection) (PiInfo, error)
 	Sync(ctx context.Context, connection Connection) error
 	OpenDisk(ctx context.Context, connection Connection, device string) (DiskStream, error)
 }
 
+// SSHRemote implements Remote with Malina's bundled SSH client.
 type SSHRemote struct{}
 
+// NewSSHRemote returns an SSH-backed remote implementation.
 func NewSSHRemote() *SSHRemote { return &SSHRemote{} }
 
 func validateConnection(connection Connection) error {

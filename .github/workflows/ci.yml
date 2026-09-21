@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.27.x"
-  NODE_VERSION: "24"
+  GO_VERSION: "1.25.x"
+  NODE_VERSION: "20.19.0"
   PNPM_VERSION: "12"
   WAILS_VERSION: "v3.0.0-beta.23"
 
@@ -84,14 +84,20 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm --dir frontend install --frozen-lockfile
 
-      - name: Run Go tests
-        run: go test ./...
+      - name: Run Go tests with race detection and coverage
+        run: |
+          go test -race -coverprofile=coverage.out . ./cmd/... ./internal/...
+          total="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')"
+          awk -v total="${total}" 'BEGIN { if (total < 45) { printf "Go coverage %.1f%% is below 45%%\n", total; exit 1 } }'
 
       - name: Run Go vet
-        run: go vet ./...
+        run: go vet . ./cmd/... ./internal/...
 
       - name: Check frontend types
         run: pnpm --dir frontend check
+
+      - name: Run frontend tests
+        run: pnpm --dir frontend test
 
       - name: Build frontend
         run: pnpm --dir frontend build

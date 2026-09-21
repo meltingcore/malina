@@ -163,22 +163,50 @@ func (s *Service) StartRestore(request core.RestoreRequest) (core.Job, error) {
 	if request.Device == "" || request.Confirm != request.Device {
 		return core.Job{}, core.NewError("CONFIRMATION_REQUIRED", "Type the exact destination device to confirm erasure.")
 	}
+
 	s.jobsMu.RLock()
-	for _, existing := range s.jobs {
-		if existing.job.Type == "restore" && existing.target == request.Device && jobIsActive(existing.job.Status) {
-			s.jobsMu.RUnlock()
-			return core.Job{}, core.NewError("DEVICE_BUSY", "Another restore job is already using "+request.Device+".")
+	appCtx := s.appCtx
+	s.jobsMu.RUnlock()
+	available, err := s.engine.Devices.List(appCtx)
+	if err != nil {
+		return core.Job{}, err
+	}
+	var target *core.Device
+	for index := range available {
+		if available[index].ID == request.Device || available[index].Path == request.Device {
+			target = &available[index]
+			break
 		}
 	}
-	s.jobsMu.RUnlock()
+	if target == nil {
+		return core.Job{}, core.NewError("UNSAFE_DESTINATION", "The destination is no longer available. Refresh devices and try again.")
+	}
+
+	// Normalise the request to the best available identity before reserving it.
+	// This makes concurrent path-based and stable-ID requests contend on one key.
+	request.Device = target.ID
+	request.Confirm = target.ID
+	s.jobsMu.Lock()
+	if _, busy := s.restoreTargets[target.ID]; busy {
+		s.jobsMu.Unlock()
+		return core.Job{}, core.NewError("DEVICE_BUSY", "Another restore job is already using "+target.Path+".")
+	}
+	s.restoreTargets[target.ID] = struct{}{}
+	s.jobsMu.Unlock()
+
 	backupName := filepath.Base(request.BackupPath)
-	title := "Restore Image — " + request.Device
-	subtitle := backupName + " → " + request.Device
-	managed, ctx, job := s.createJob("restore", title, subtitle, request.BackupPath, request.Device, request.Device)
+	title := "Restore Image — " + target.Path
+	subtitle := backupName + " → " + target.Path
+	managed, ctx, job := s.createJob("restore", title, subtitle, request.BackupPath, target.Path, target.ID)
 	go func() {
 		defer managed.cancel()
+		defer func() {
+			s.jobsMu.Lock()
+			delete(s.restoreTargets, target.ID)
+			s.jobsMu.Unlock()
+		}()
 		_, err := s.engine.Restore(ctx, request, s.jobProgress(job.ID))
-		s.finishJob(job.ID, err, request.Device)
+		s.finishJob(job.ID, err, target.Path)
 	}()
 	return job, nil
 }

@@ -13,7 +13,6 @@ import (
 var assets embed.FS
 
 func init() {
-	application.RegisterEvent[core.Progress]("malina:progress")
 	application.RegisterEvent[core.Job]("malina:job")
 }
 
@@ -34,12 +33,10 @@ func main() {
 		Title:              "Malina",
 		Width:              1120,
 		Height:             820,
-		MinWidth:           1120,
-		MinHeight:          820,
-		MaxWidth:           1120,
-		MaxHeight:          820,
-		DisableResize:      true,
-		ZoomControlEnabled: false,
+		MinWidth:           760,
+		MinHeight:          620,
+		DisableResize:      false,
+		ZoomControlEnabled: true,
 		BackgroundColour:   application.NewRGB(234, 242, 239),
 		URL:                "/",
 	})

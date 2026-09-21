@@ -19,6 +19,16 @@ tasks:
     cmds:
       - task: '{{.GOOS}}:build'
 
+  build:dev:
+    summary: Builds a development binary without replacing release artifacts
+    cmds:
+      - task: '{{.GOOS}}:build'
+        vars:
+          DEV: "true"
+          OUTPUT: '{{.DEV_OUTPUT}}'
+    vars:
+      DEV_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}-dev{{exeExt}}'
+
   package:
     summary: Packages a production desktop application
     cmds:
@@ -28,6 +38,15 @@ tasks:
     summary: Runs the native desktop application
     cmds:
       - task: '{{.GOOS}}:run'
+
+  run:dev:
+    summary: Runs the development binary
+    cmds:
+      - task: '{{.GOOS}}:run'
+        vars:
+          OUTPUT: '{{.DEV_OUTPUT}}'
+    vars:
+      DEV_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}-dev{{exeExt}}'
 
   dev:
     summary: Runs the application in development mode
@@ -40,14 +59,18 @@ tasks:
       - go build -o "{{.BIN_DIR}}/cli/" ./cmd/malina
 
   test:
-    summary: Runs Go and frontend checks
+    summary: Runs Go tests plus frontend tests, type checks, and production build
     deps:
       - task: common:install:frontend:deps
     cmds:
-      - go test ./...
+      - go test . ./cmd/... ./internal/...
+      - pnpm --dir frontend test
       - task: common:frontend:run
         vars:
           SCRIPT: check
+      - task: common:frontend:run
+        vars:
+          SCRIPT: build
 
   setup:docker:
     cmds:

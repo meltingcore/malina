@@ -12,8 +12,25 @@ import (
 	"runtime"
 )
 
+// Restore verifies a backup, revalidates a removable target, and writes the image.
 func (e *Engine) Restore(ctx context.Context, request RestoreRequest, onProgress ProgressFunc) (RestoreResult, error) {
 	return e.restore(ctx, request, onProgress, false)
+}
+
+func findDevice(devices []Device, selector string) (Device, bool) {
+	for _, device := range devices {
+		if device.ID == selector || device.Path == selector {
+			return device, true
+		}
+	}
+	return Device{}, false
+}
+
+func samePhysicalDevice(expected, actual Device) bool {
+	if expected.Stable {
+		return actual.Stable && expected.ID == actual.ID && expected.Bytes == actual.Bytes
+	}
+	return expected.Path == actual.Path && expected.Bytes == actual.Bytes && expected.Name == actual.Name && expected.Transport == actual.Transport
 }
 
 func (e *Engine) restore(ctx context.Context, request RestoreRequest, onProgress ProgressFunc, allowFileTarget bool) (RestoreResult, error) {
@@ -25,26 +42,30 @@ func (e *Engine) restore(ctx context.Context, request RestoreRequest, onProgress
 	}
 
 	emit(onProgress, Progress{Phase: "preflight", Message: "Verifying backup before erasing the destination"})
-	_, err := e.Verify(ctx, request.BackupPath, func(progress Progress) {
-		progress.Phase = "preflight"
-		emit(onProgress, progress)
-	})
-	if err != nil {
-		return RestoreResult{}, err
-	}
 	backup, err := LoadBackup(request.BackupPath)
 	if err != nil {
 		return RestoreResult{}, err
 	}
+	imageFile, err := os.Open(filepath.Join(backup.Path, backup.Manifest.Image.File))
+	if err != nil {
+		return RestoreResult{}, WrapError("RESTORE_FAILED", "Cannot open backup image: "+err.Error(), err)
+	}
+	defer imageFile.Close()
+	if _, err := verifyBackupFile(ctx, backup, imageFile, func(progress Progress) {
+		progress.Phase = "preflight"
+		emit(onProgress, progress)
+	}); err != nil {
+		return RestoreResult{}, err
+	}
 	emit(onProgress, Progress{
-		Phase:       "prepare",
-		Message:     "Preparing the restore pipeline",
-		TotalBytes:  backup.Manifest.Image.RawBytes,
-		Source:      filepath.Join(backup.Path, backup.Manifest.Image.File),
-		Destination: request.Device,
+		Phase:      "prepare",
+		Message:    "Preparing the restore pipeline",
+		TotalBytes: backup.Manifest.Image.RawBytes,
+		Source:     filepath.Join(backup.Path, backup.Manifest.Image.File),
 	})
 
 	writePath := request.Device
+	resultDevice := request.Device
 	devices := e.Devices
 	if devices == nil {
 		devices = NewDeviceManager(runtime.GOOS)
@@ -54,34 +75,43 @@ func (e *Engine) restore(ctx context.Context, request RestoreRequest, onProgress
 		if err != nil {
 			return RestoreResult{}, err
 		}
-		var target *Device
-		for index := range available {
-			if available[index].ID == request.Device || available[index].Path == request.Device {
-				target = &available[index]
-				break
-			}
-		}
-		if target == nil {
+		target, found := findDevice(available, request.Device)
+		if !found {
 			return RestoreResult{}, NewError("UNSAFE_DESTINATION", "The destination is not in the current removable-device list. Refresh devices and try again.")
 		}
 		if target.Bytes < backup.Manifest.Image.RawBytes {
 			return RestoreResult{}, NewError("DESTINATION_TOO_SMALL", fmt.Sprintf("The destination has %d bytes but the image needs %d.", target.Bytes, backup.Manifest.Image.RawBytes))
 		}
-		emit(onProgress, Progress{Phase: "unmount", Message: "Unmounting " + request.Device})
-		if err := devices.Unmount(ctx, request.Device); err != nil {
+		resultDevice = target.Path
+		emit(onProgress, Progress{Phase: "unmount", Message: "Unmounting " + target.Path, Destination: target.Path})
+		if err := devices.Unmount(ctx, target.Path); err != nil {
 			return RestoreResult{}, err
 		}
-		writePath, err = devices.WritablePath(target.Path)
+
+		// Device paths are reusable. Re-enumerate after unmounting and require the
+		// same physical media before opening anything for destructive writes.
+		refreshed, err := devices.List(ctx)
+		if err != nil {
+			return RestoreResult{}, err
+		}
+		selector := target.Path
+		if target.Stable {
+			selector = target.ID
+		}
+		current, found := findDevice(refreshed, selector)
+		if !found || !samePhysicalDevice(target, current) {
+			return RestoreResult{}, NewError("DEVICE_CHANGED", "The selected destination changed after confirmation. Refresh devices and confirm the restore again.")
+		}
+		resultDevice = current.Path
+		writePath, err = devices.WritablePath(current.Path)
 		if err != nil {
 			return RestoreResult{}, err
 		}
 	}
 
-	imageFile, err := os.Open(filepath.Join(backup.Path, backup.Manifest.Image.File))
-	if err != nil {
-		return RestoreResult{}, WrapError("RESTORE_FAILED", "Cannot open backup image: "+err.Error(), err)
+	if _, err := imageFile.Seek(0, io.SeekStart); err != nil {
+		return RestoreResult{}, WrapError("RESTORE_FAILED", "Cannot seek in backup image: "+err.Error(), err)
 	}
-	defer imageFile.Close()
 	zipReader, err := gzip.NewReader(imageFile)
 	if err != nil {
 		return RestoreResult{}, WrapError("RESTORE_FAILED", "Cannot decompress backup image: "+err.Error(), err)
@@ -134,11 +164,11 @@ func (e *Engine) restore(ctx context.Context, request RestoreRequest, onProgress
 
 	ejected := false
 	if !allowFileTarget {
-		ejected = devices.Eject(ctx, request.Device)
+		ejected = devices.Eject(ctx, resultDevice)
 	}
 	emit(onProgress, Progress{Phase: "complete", Message: "Restore complete", Fraction: 1})
 	return RestoreResult{
-		Device:       request.Device,
+		Device:       resultDevice,
 		BytesWritten: reader.read,
 		Verified:     request.Verify,
 		Ejected:      ejected,

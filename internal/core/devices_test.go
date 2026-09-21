@@ -9,7 +9,7 @@ import (
 func TestParseWindowsDevicesExcludesSystemAndNonExternalDisks(t *testing.T) {
 	payload := `[
     {"Number":0,"FriendlyName":"System","Size":1000,"BusType":"NVMe","IsBoot":true,"IsSystem":true},
-    {"Number":2,"FriendlyName":"SD card","Size":2000,"BusType":"USB","IsBoot":false,"IsSystem":false},
+    {"Number":2,"FriendlyName":"SD card","Size":2000,"BusType":"USB","UniqueId":"usb-card-123","IsBoot":false,"IsSystem":false},
     {"Number":3,"FriendlyName":"Internal","Size":3000,"BusType":"SATA","IsBoot":false,"IsSystem":false}
   ]`
 	devices, err := parseWindowsDevices(payload)
@@ -18,6 +18,9 @@ func TestParseWindowsDevicesExcludesSystemAndNonExternalDisks(t *testing.T) {
 	}
 	if len(devices) != 1 || devices[0].Path != `\\.\PhysicalDrive2` {
 		t.Fatalf("unexpected devices: %#v", devices)
+	}
+	if !devices[0].Stable || devices[0].ID == devices[0].Path {
+		t.Fatalf("expected a stable hardware identity: %#v", devices[0])
 	}
 }
 
@@ -68,9 +71,10 @@ func TestListLinuxDevicesUsesProcAndSysfs(t *testing.T) {
 	systemDisk := filepath.Join(sysRoot, "devices", "pci", "nvme", "nvme0n1")
 	systemPartition := filepath.Join(systemDisk, "nvme0n1p2")
 	usbDisk := filepath.Join(sysRoot, "devices", "pci", "usb1", "1-1", "block", "sda")
+	fixedMMC := filepath.Join(sysRoot, "devices", "platform", "mmc", "block", "mmcblk1")
 	for _, directory := range []string{
 		filepath.Join(sysRoot, "dev", "block"), filepath.Join(sysRoot, "class", "block"),
-		filepath.Join(systemDisk, "device"), systemPartition, filepath.Join(usbDisk, "device"),
+		filepath.Join(systemDisk, "device"), systemPartition, filepath.Join(usbDisk, "device"), filepath.Join(fixedMMC, "device"),
 	} {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
 			t.Fatal(err)
@@ -88,11 +92,15 @@ func TestListLinuxDevicesUsesProcAndSysfs(t *testing.T) {
 	write(filepath.Join(usbDisk, "size"), "4000\n")
 	write(filepath.Join(usbDisk, "removable"), "0\n")
 	write(filepath.Join(usbDisk, "device", "model"), "USB Card Reader\n")
+	write(filepath.Join(fixedMMC, "size"), "8000\n")
+	write(filepath.Join(fixedMMC, "removable"), "0\n")
+	write(filepath.Join(fixedMMC, "device", "model"), "Soldered eMMC\n")
 	write(mountInfo, "36 25 259:2 / / rw - ext4 /dev/nvme0n1p2 rw\n")
 	for link, target := range map[string]string{
 		filepath.Join(sysRoot, "dev", "block", "259:2"):     systemPartition,
 		filepath.Join(sysRoot, "class", "block", "nvme0n1"): systemDisk,
 		filepath.Join(sysRoot, "class", "block", "sda"):     usbDisk,
+		filepath.Join(sysRoot, "class", "block", "mmcblk1"): fixedMMC,
 	} {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)

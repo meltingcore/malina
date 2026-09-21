@@ -2,10 +2,10 @@ import { CancelError, Events } from "@wailsio/runtime";
 
 import type { Backup, Connection, Device, Job, PiInfo } from "../bindings/github.com/meltingcore/malina/internal/core/models.js";
 import * as Service from "../bindings/github.com/meltingcore/malina/internal/desktop/service.js";
+import { fileName, formatBytes, formatClock, formatDuration, formatRate } from "./format.js";
+import { elapsedSeconds, isActiveJob, jobFraction, statusText, updateJobRuntime } from "./jobs.js";
+import type { JobFilter, JobRuntime } from "./jobs.js";
 import "./style.css";
-
-type JobFilter = "all" | "active" | "completed";
-type JobRuntime = { job: Job; rate: number; lastBytes: number; lastAt: number; phase: string };
 
 const element = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -106,64 +106,11 @@ let currentJobFilter: JobFilter = "all";
 let selectedJobID = "";
 const jobs = new Map<string, JobRuntime>();
 
-const formatBytes = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-};
-
-const formatDuration = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "Calculating…";
-  const rounded = Math.max(0, Math.round(seconds));
-  const hours = Math.floor(rounded / 3600);
-  const minutes = Math.floor((rounded % 3600) / 60);
-  const remainingSeconds = rounded % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
-  return `${remainingSeconds}s`;
-};
-
-const formatClock = (seconds: number): string => {
-  const rounded = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(rounded / 3600);
-  const minutes = Math.floor((rounded % 3600) / 60);
-  const remainingSeconds = rounded % 60;
-  const clock = `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-  return hours > 0 ? `${String(hours).padStart(2, "0")}:${clock}` : clock;
-};
-
-const formatRate = (bytesPerSecond: number): string => bytesPerSecond > 0 ? `${formatBytes(bytesPerSecond)}/s` : "Waiting for data";
-const fileName = (path: string): string => path.split(/[\\/]/).pop() || path;
-
 const errorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) return String(error.message);
   return "The operation failed unexpectedly.";
-};
-
-const isActiveJob = (job: Job): boolean => job.status === "running" || job.status === "paused" || job.status === "cancelling";
-
-const jobFraction = (job: Job): number => {
-  if (job.status === "completed") return 1;
-  const calculated = (job.totalBytes ?? 0) > 0 ? (job.bytes ?? 0) / (job.totalBytes ?? 1) : 0;
-  return Math.max(0, Math.min(1, job.fraction ?? calculated));
-};
-
-const statusText = (job: Job): string => {
-  if (job.status === "running") {
-    const phase = job.phase === "readback" ? "Verifying" : job.phase === "restore" ? "Restoring" : job.phase === "backup" ? "Backing up" : "Running";
-    const percent = Math.round(jobFraction(job) * 100);
-    return percent > 0 ? `${phase} ${percent}%` : phase;
-  }
-  return job.status.charAt(0).toUpperCase() + job.status.slice(1);
-};
-
-const elapsedSeconds = (job: Job): number => {
-  const start = Date.parse(job.startedAt);
-  const end = job.completedAt ? Date.parse(job.completedAt) : Date.now();
-  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, (end - start) / 1000) : 0;
 };
 
 const authMethod = (): "key" | "password" => {
@@ -358,15 +305,15 @@ const renderDevices = (devices: Device[]): void => {
   availableDevices = devices;
   const previous = deviceSelect.value;
   deviceSelect.replaceChildren(new Option(devices.length ? "Choose a drive" : "No removable drives found", ""));
-  for (const device of devices) deviceSelect.add(new Option(`${device.path} — ${device.name} (${formatBytes(device.bytes)})`, device.path));
-  if (devices.some((device) => device.path === previous)) deviceSelect.value = previous;
+  for (const device of devices) deviceSelect.add(new Option(`${device.path} — ${device.name} (${formatBytes(device.bytes)})`, device.id));
+  if (devices.some((device) => device.id === previous)) deviceSelect.value = previous;
   devicesLoaded = true;
   updateTargetSummary();
   updateRestoreAvailability();
 };
 
 const updateTargetSummary = (): void => {
-  const selected = availableDevices.find((device) => device.path === deviceSelect.value);
+  const selected = availableDevices.find((device) => device.id === deviceSelect.value);
   targetDetail.textContent = selected ? `${selected.name} · ${formatBytes(selected.bytes)}` : "No target selected";
   restoreWarning.textContent = selected ? `${selected.path} and all its partitions will be overwritten.` : "The selected drive and all its partitions will be overwritten.";
 };
@@ -396,22 +343,7 @@ const routeText = (job: Job): string => {
 const upsertJob = (job: Job): void => {
   const now = performance.now();
   const previous = jobs.get(job.id);
-  const bytes = job.bytes ?? 0;
-  let rate = previous?.rate ?? 0;
-  let lastBytes = previous?.lastBytes ?? bytes;
-  let lastAt = previous?.lastAt ?? now;
-  if (previous && previous.phase !== job.phase) {
-    rate = 0;
-    lastBytes = bytes;
-    lastAt = now;
-  } else if (previous && bytes > lastBytes && now > lastAt) {
-    const instantRate = (bytes - lastBytes) / ((now - lastAt) / 1000);
-    rate = rate > 0 ? rate * 0.68 + instantRate * 0.32 : instantRate;
-    lastBytes = bytes;
-    lastAt = now;
-  }
-  if (!isActiveJob(job) || job.status === "paused") rate = 0;
-  jobs.set(job.id, { job, rate, lastBytes, lastAt, phase: job.phase });
+  jobs.set(job.id, updateJobRuntime(previous, job, now));
   renderJobs();
   if (selectedJobID === job.id && !jobDetailsOverlay.hidden) renderJobDetails();
 };
@@ -611,11 +543,11 @@ const openRestoreConfirmation = (): void => {
     showError(new Error("Choose a backup image and target drive first."));
     return;
   }
-  const target = availableDevices.find((device) => device.path === deviceSelect.value);
+  const target = availableDevices.find((device) => device.id === deviceSelect.value);
   restoreConfirmImage.textContent = fileName(selectedBackup.path);
   restoreConfirmImage.title = selectedBackup.path;
   restoreConfirmTarget.textContent = target ? `${target.name} · ${target.path}` : deviceSelect.value;
-  restoreConfirmTarget.title = deviceSelect.value;
+  restoreConfirmTarget.title = target?.path ?? deviceSelect.value;
   restoreConfirmOverlay.hidden = false;
   restoreConfirmOverlay.classList.remove("hidden");
   confirmRestoreButton.focus();
@@ -629,8 +561,21 @@ const closeRestoreConfirmation = (): void => {
 
 Events.On("malina:job", (event) => { upsertJob(event.data); });
 
-document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+const navigationTabs = Array.from(document.querySelectorAll<HTMLButtonElement>(".tab"));
+navigationTabs.forEach((tab, index) => {
   tab.addEventListener("click", () => switchView(tab.dataset.view ?? "backup-view"));
+  tab.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? navigationTabs.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + navigationTabs.length) % navigationTabs.length;
+    const next = navigationTabs[nextIndex];
+    next.focus();
+    switchView(next.dataset.view ?? "backup-view");
+  });
 });
 
 document.querySelectorAll<HTMLButtonElement>(".job-filter").forEach((button) => {
@@ -827,7 +772,34 @@ restoreConfirmOverlay.addEventListener("click", (event) => {
   if (event.target === restoreConfirmOverlay) closeRestoreConfirmation();
 });
 
+const visibleModal = (): HTMLElement | null => {
+  if (!cancelConfirm.classList.contains("hidden")) return cancelConfirm;
+  return [sudoPasswordOverlay, helpOverlay, restoreConfirmOverlay, jobDetailsOverlay]
+    .find((overlay) => !overlay.hidden) ?? null;
+};
+
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Tab") {
+    const modal = visibleModal();
+    if (!modal) return;
+    const focusable = Array.from(modal.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((candidate) => candidate.getClientRects().length > 0);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+    return;
+  }
   if (event.key !== "Escape") return;
   if (!sudoPasswordOverlay.hidden) {
     closeSudoPasswordPrompt(null);

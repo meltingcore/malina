@@ -11,17 +11,20 @@ import (
 )
 
 type Service struct {
-	app         *application.App
-	engine      *core.Engine
-	operation   sync.Mutex
-	jobsMu      sync.RWMutex
-	jobs        map[string]*managedJob
-	jobSequence uint64
-	appCtx      context.Context
+	app            *application.App
+	engine         *core.Engine
+	jobsMu         sync.RWMutex
+	jobs           map[string]*managedJob
+	restoreTargets map[string]struct{}
+	jobSequence    uint64
+	appCtx         context.Context
 }
 
 func NewService(app *application.App, engine *core.Engine) *Service {
-	return &Service{app: app, engine: engine, jobs: make(map[string]*managedJob), appCtx: context.Background()}
+	return &Service{
+		app: app, engine: engine, jobs: make(map[string]*managedJob),
+		restoreTargets: make(map[string]struct{}), appCtx: context.Background(),
+	}
 }
 
 func (s *Service) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
@@ -29,12 +32,6 @@ func (s *Service) ServiceStartup(ctx context.Context, _ application.ServiceOptio
 	s.appCtx = ctx
 	s.jobsMu.Unlock()
 	return nil
-}
-
-func (s *Service) progress() core.ProgressFunc {
-	return func(progress core.Progress) {
-		s.app.Event.Emit("malina:progress", progress)
-	}
 }
 
 func (s *Service) DefaultBackupDirectory() string {
@@ -97,34 +94,10 @@ func (s *Service) Inspect(ctx context.Context, connection core.Connection) (core
 	return s.engine.Inspect(ctx, connection)
 }
 
-func (s *Service) Backup(ctx context.Context, request core.BackupRequest) (core.Backup, error) {
-	if !s.operation.TryLock() {
-		return core.Backup{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
-	}
-	defer s.operation.Unlock()
-	return s.engine.Backup(ctx, request, s.progress())
-}
-
 func (s *Service) ListBackups(_ context.Context, directory string) ([]core.Backup, error) {
 	return core.ListBackups(directory)
 }
 
-func (s *Service) Verify(ctx context.Context, backupPath string) (core.VerifyResult, error) {
-	if !s.operation.TryLock() {
-		return core.VerifyResult{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
-	}
-	defer s.operation.Unlock()
-	return s.engine.Verify(ctx, backupPath, s.progress())
-}
-
 func (s *Service) ListDevices(ctx context.Context) ([]core.Device, error) {
 	return s.engine.Devices.List(ctx)
-}
-
-func (s *Service) Restore(ctx context.Context, request core.RestoreRequest) (core.RestoreResult, error) {
-	if !s.operation.TryLock() {
-		return core.RestoreResult{}, core.NewError("OPERATION_IN_PROGRESS", "Another backup, verification, or restore is already running.")
-	}
-	defer s.operation.Unlock()
-	return s.engine.Restore(ctx, request, s.progress())
 }

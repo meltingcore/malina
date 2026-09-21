@@ -13,7 +13,6 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "malina:job": core$0.Job;
-            "malina:progress": core$0.Progress;
         }
     }
 }

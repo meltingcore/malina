@@ -1,10 +1,9 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -14,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.27.x"
-  NODE_VERSION: "24"
+  GO_VERSION: "1.25.x"
+  NODE_VERSION: "20.19.0"
   PNPM_VERSION: "12"
   WAILS_VERSION: "v3.0.0-beta.23"
 
@@ -47,11 +46,69 @@ jobs:
             echo "::error file=build/config.yml::Version '${config_version}' does not match the latest changelog version '${changelog_version}'."
             exit 1
           fi
+          release_tag="v${changelog_version}"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_NAME}" != "${release_tag}" ]]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not match application version '${release_tag}'."
+            exit 1
+          fi
           echo "version=${changelog_version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+
+  quality:
+    name: Verify release candidate
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Run Go tests with race detection
+        run: |
+          go test -race -coverprofile=coverage.out . ./cmd/... ./internal/...
+          total="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')"
+          awk -v total="${total}" 'BEGIN { if (total < 45) { printf "Go coverage %.1f%% is below 45%%\n", total; exit 1 } }'
+
+      - name: Run Go vet
+        run: go vet . ./cmd/... ./internal/...
+
+      - name: Test and build frontend
+        run: |
+          pnpm --dir frontend test
+          pnpm --dir frontend check
+          pnpm --dir frontend build
 
   linux:
     name: Build Linux amd64
-    needs: metadata
+    needs: [metadata, quality]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -112,7 +169,7 @@ jobs:
 
   macos:
     name: Build macOS universal
-    needs: metadata
+    needs: [metadata, quality]
     runs-on: macos-14
     timeout-minutes: 35
 
@@ -171,7 +228,7 @@ jobs:
 
   windows:
     name: Build Windows amd64
-    needs: metadata
+    needs: [metadata, quality]
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -234,7 +291,6 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - metadata
       - linux
@@ -277,21 +333,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh release view "${PACKAGE_VERSION}" >/dev/null 2>&1; then
-            gh release upload "${PACKAGE_VERSION}" dist/* --clobber
-            gh release edit "${PACKAGE_VERSION}" \
-              --target "${GITHUB_SHA}" \
-              --title "${PACKAGE_VERSION}" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --latest=false
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" dist/* --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file release-notes.md
           else
-            gh release create "${PACKAGE_VERSION}" dist/* \
-              --target "${GITHUB_SHA}" \
-              --title "${PACKAGE_VERSION}" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --latest=false
+            gh release create "${RELEASE_TAG}" dist/* \
+              --title "${RELEASE_TAG}" \
+              --notes-file release-notes.md
           fi

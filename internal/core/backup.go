@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 )
 
+// Backup streams, compresses, hashes, and atomically commits one whole-disk backup.
 func (e *Engine) Backup(ctx context.Context, request BackupRequest, onProgress ProgressFunc) (result Backup, resultErr error) {
 	if request.OutputDirectory == "" {
 		return Backup{}, NewError("OUTPUT_REQUIRED", "Choose a directory in which to store the backup.")

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -24,6 +25,30 @@ type fakeRemote struct {
 	data    []byte
 	waitErr error
 	syncErr error
+}
+
+type changingDeviceOperations struct {
+	before  Device
+	after   Device
+	lists   int
+	ejected string
+}
+
+func (d *changingDeviceOperations) List(context.Context) ([]Device, error) {
+	d.lists++
+	if d.lists == 1 {
+		return []Device{d.before}, nil
+	}
+	return []Device{d.after}, nil
+}
+
+func (*changingDeviceOperations) Unmount(context.Context, string) error { return nil }
+func (*changingDeviceOperations) WritablePath(device string) (string, error) {
+	return device, nil
+}
+func (d *changingDeviceOperations) Eject(_ context.Context, device string) bool {
+	d.ejected = device
+	return true
 }
 
 func (r *fakeRemote) Inspect(context.Context, Connection) (PiInfo, error) { return r.info, nil }
@@ -179,6 +204,52 @@ func TestRestoreRequiresExactConfirmation(t *testing.T) {
 	assertErrorCode(t, err, "CONFIRMATION_REQUIRED")
 }
 
+func TestRestoreStopsWhenConfirmedDeviceChanges(t *testing.T) {
+	engine := testEngine([]byte("valid image content"))
+	backup, err := engine.Backup(context.Background(), BackupRequest{
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devices := &changingDeviceOperations{
+		before: Device{ID: "linux:original", Path: "/dev/sdb", Name: "Original", Bytes: 1 << 20, Transport: "usb", Removable: true, Stable: true},
+		after:  Device{ID: "linux:replacement", Path: "/dev/sdb", Name: "Replacement", Bytes: 1 << 20, Transport: "usb", Removable: true, Stable: true},
+	}
+	engine.Devices = devices
+	_, err = engine.Restore(context.Background(), RestoreRequest{
+		BackupPath: backup.Path, Device: devices.before.ID, Confirm: devices.before.ID,
+	}, nil)
+	assertErrorCode(t, err, "DEVICE_CHANGED")
+}
+
+func TestRestoreUsesPathForStableDeviceWriteAndEject(t *testing.T) {
+	raw := []byte("valid image content")
+	engine := testEngine(raw)
+	backup, err := engine.Backup(context.Background(), BackupRequest{
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(t.TempDir(), "target.img")
+	if err := os.WriteFile(targetPath, make([]byte, len(raw)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := Device{ID: "test:stable-device", Path: targetPath, Name: "Stable target", Bytes: int64(len(raw)), Transport: "usb", Removable: true, Stable: true}
+	devices := &changingDeviceOperations{before: target, after: target}
+	engine.Devices = devices
+	result, err := engine.Restore(context.Background(), RestoreRequest{
+		BackupPath: backup.Path, Device: target.ID, Confirm: target.ID, Verify: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Device != targetPath || devices.ejected != targetPath {
+		t.Fatalf("stable ID leaked into path operation: result=%q eject=%q", result.Device, devices.ejected)
+	}
+}
+
 func TestLoadBackupRejectsUnsafeImageMetadata(t *testing.T) {
 	engine := testEngine([]byte("disk image"))
 	backup, err := engine.Backup(context.Background(), BackupRequest{
@@ -223,5 +294,73 @@ func TestBackupNeverPersistsSSHPassword(t *testing.T) {
 		if bytes.Contains(data, []byte("never-write-this")) {
 			t.Fatalf("SSH password was persisted in %s", entry.Name())
 		}
+	}
+}
+
+func TestConcurrentBackupsClaimDifferentDirectories(t *testing.T) {
+	raw := bytes.Repeat([]byte("concurrent backup"), 4096)
+	engine := testEngine(raw)
+	parent := t.TempDir()
+	start := make(chan struct{})
+	results := make(chan Backup, 2)
+	errors := make(chan error, 2)
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			backup, err := engine.Backup(context.Background(), BackupRequest{
+				Connection: Connection{Host: "user@host"}, OutputDirectory: parent,
+			}, nil)
+			results <- backup
+			errors <- err
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := map[string]bool{}
+	for backup := range results {
+		paths[backup.Path] = true
+		if _, err := engine.Verify(context.Background(), backup.Path, nil); err != nil {
+			t.Fatalf("concurrent backup did not verify: %v", err)
+		}
+	}
+	if len(paths) != 2 {
+		t.Fatalf("concurrent backups shared a path: %#v", paths)
+	}
+}
+
+func TestBackupDoesNotDeleteUnknownPartialDirectory(t *testing.T) {
+	engine := testEngine([]byte("disk image"))
+	parent := t.TempDir()
+	base := backupName("pi-test", engine.clock())
+	stale := filepath.Join(parent, base+".partial")
+	if err := os.Mkdir(stale, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(stale, "keep-me")
+	if err := os.WriteFile(marker, []byte("owned by another run"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	backup, err := engine.Backup(context.Background(), BackupRequest{
+		Connection: Connection{Host: "user@host"}, OutputDirectory: parent,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backup.Path == filepath.Join(parent, base) {
+		t.Fatal("backup reused a name with an existing partial directory")
+	}
+	if contents, err := os.ReadFile(marker); err != nil || string(contents) != "owned by another run" {
+		t.Fatalf("existing partial data was changed: %q, %v", contents, err)
 	}
 }

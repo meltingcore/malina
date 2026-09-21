@@ -62,11 +62,20 @@ func malinaHostKeyCallback() (ssh.HostKeyCallback, error) {
 	if err := file.Close(); err != nil {
 		return nil, WrapError("SSH_HOST_KEY_FAILED", "Cannot initialise Malina's known-hosts file.", err)
 	}
-	check, err := knownhosts.New(path)
-	if err != nil {
-		return nil, WrapError("SSH_HOST_KEY_FAILED", "Cannot read Malina's known-hosts file.", err)
-	}
+	return hostKeyCallbackForPath(path), nil
+}
+
+func hostKeyCallbackForPath(path string) ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		knownHostsMu.Lock()
+		defer knownHostsMu.Unlock()
+
+		// Reload while holding the lock so simultaneous first connections cannot
+		// both accept and persist different keys for the same host.
+		check, checkErr := knownhosts.New(path)
+		if checkErr != nil {
+			return WrapError("SSH_HOST_KEY_FAILED", "Cannot read Malina's known-hosts file.", checkErr)
+		}
 		err := check(hostname, remote, key)
 		if err == nil {
 			return nil
@@ -76,8 +85,6 @@ func malinaHostKeyCallback() (ssh.HostKeyCallback, error) {
 			return WrapError("SSH_HOST_KEY_CHANGED", "The Raspberry Pi host key changed. Refusing to connect.", err)
 		}
 
-		knownHostsMu.Lock()
-		defer knownHostsMu.Unlock()
 		knownFile, openErr := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 		if openErr != nil {
 			return WrapError("SSH_HOST_KEY_FAILED", "Cannot remember the Raspberry Pi host key.", openErr)
@@ -88,7 +95,7 @@ func malinaHostKeyCallback() (ssh.HostKeyCallback, error) {
 			return WrapError("SSH_HOST_KEY_FAILED", "Cannot remember the Raspberry Pi host key.", errors.Join(writeErr, closeErr))
 		}
 		return nil
-	}, nil
+	}
 }
 
 func privateKeySigner(path, password string) (ssh.Signer, error) {

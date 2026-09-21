@@ -31,7 +31,7 @@ configuration is not stored on the disk and is therefore not included.
 Besides the whole tech stack, Malina uses the following additional third-party work:
 
 * The app logo: [Fruit icons created by Magnific](https://www.flaticon.com/free-icons/fruit)
-* The color pallette: [Enchanted Cherry Forest](https://coolors.co/palette/eaf2ef-912f56-521945-361f27-0d090a)
+* The colour palette: [Enchanted Cherry Forest](https://coolors.co/palette/eaf2ef-912f56-521945-361f27-0d090a)
 
 ## Requirements
 
@@ -74,9 +74,15 @@ wails3 task cli:build
 
 Outputs are written to `bin/`. Run all checks with:
 
+Development builds use `bin/malina-dev` (or `bin/malina-dev.exe` on Windows), so running
+`wails3 dev` does not replace or collide with a universal/release binary in `bin/malina`.
+
 ```sh
 wails3 task test
 ```
+
+The component boundaries, destructive-operation invariants, backup commit protocol, and background
+job lifecycle are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Releases
 
@@ -142,6 +148,8 @@ remains unallocated.
 
 - Only complete whole-disk images are accepted.
 - Internal/system disks are excluded from destination discovery.
+- Stable hardware/media identifiers are preferred and revalidated immediately before a restore.
+- Concurrent restores cannot reserve the same physical destination.
 - An arbitrary path cannot bypass removable-device discovery.
 - The backup is fully verified before the destination is opened for writing.
 - A dedicated confirmation dialog shows the exact image and destination before erasure; the backend

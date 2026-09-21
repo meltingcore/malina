@@ -11,8 +11,5 @@ export type {
     ManifestImage,
     ManifestSource,
     PiInfo,
-    Progress,
-    RestoreRequest,
-    RestoreResult,
-    VerifyResult
+    RestoreRequest
 } from "./models.js";

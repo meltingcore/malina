@@ -3,11 +3,15 @@ package core
 import "time"
 
 const (
-	BackupFormat        = "malina-backup"
+	// BackupFormat identifies Malina backup manifests.
+	BackupFormat = "malina-backup"
+	// BackupFormatVersion is incremented when the on-disk manifest becomes incompatible.
 	BackupFormatVersion = 1
-	ImageFilename       = "disk.img.gz"
+	// ImageFilename is the only image name accepted inside a Malina backup directory.
+	ImageFilename = "disk.img.gz"
 )
 
+// Connection contains ephemeral SSH connection settings. Password fields must never be persisted.
 type Connection struct {
 	Host           string `json:"host"`
 	Identity       string `json:"identity,omitempty"`
@@ -17,6 +21,7 @@ type Connection struct {
 	UseDefaultKeys bool   `json:"useDefaultKeys,omitempty"`
 }
 
+// Progress describes one point-in-time update from a long-running operation.
 type Progress struct {
 	Phase       string  `json:"phase"`
 	Message     string  `json:"message"`
@@ -27,8 +32,10 @@ type Progress struct {
 	Destination string  `json:"destination,omitempty"`
 }
 
+// ProgressFunc receives operation progress. Implementations must return quickly.
 type ProgressFunc func(Progress)
 
+// Job is the serialisable state of a desktop background operation.
 type Job struct {
 	ID          string     `json:"id"`
 	Type        string     `json:"type"`
@@ -48,6 +55,7 @@ type Job struct {
 	ResultPath  string     `json:"resultPath,omitempty"`
 }
 
+// PiInfo describes the source disk and access capabilities discovered over SSH.
 type PiInfo struct {
 	Hostname           string   `json:"hostname"`
 	Model              string   `json:"model"`
@@ -68,6 +76,7 @@ type PiInfo struct {
 	Warnings           []string `json:"warnings"`
 }
 
+// Manifest is the durable metadata required to validate and restore a backup.
 type Manifest struct {
 	Format        string         `json:"format"`
 	FormatVersion int            `json:"formatVersion"`
@@ -80,6 +89,7 @@ type Manifest struct {
 	Warning       string         `json:"warning"`
 }
 
+// ManifestSource records the system and whole-disk source used for a backup.
 type ManifestSource struct {
 	Host              string `json:"host"`
 	Hostname          string `json:"hostname"`
@@ -92,6 +102,7 @@ type ManifestSource struct {
 	RootFilesystem    string `json:"rootFilesystem"`
 }
 
+// ManifestImage records the compressed and uncompressed image integrity metadata.
 type ManifestImage struct {
 	File             string `json:"file"`
 	Compression      string `json:"compression"`
@@ -101,11 +112,13 @@ type ManifestImage struct {
 	CompressedSHA256 string `json:"compressedSha256"`
 }
 
+// Backup combines an absolute backup directory with its validated manifest.
 type Backup struct {
 	Path     string   `json:"path"`
 	Manifest Manifest `json:"manifest"`
 }
 
+// VerifyResult reports successful verification and the checksums that were observed.
 type VerifyResult struct {
 	Valid            bool     `json:"valid"`
 	RawBytes         int64    `json:"rawBytes"`
@@ -114,6 +127,7 @@ type VerifyResult struct {
 	Manifest         Manifest `json:"manifest"`
 }
 
+// Device describes a whole physical restore destination.
 type Device struct {
 	ID        string `json:"id"`
 	Path      string `json:"path"`
@@ -121,8 +135,11 @@ type Device struct {
 	Bytes     int64  `json:"bytes"`
 	Transport string `json:"transport"`
 	Removable bool   `json:"removable"`
+	// Stable is true when ID comes from hardware/media identity rather than a reusable OS path.
+	Stable bool `json:"stable"`
 }
 
+// RestoreResult describes a completed restore and optional read-back verification.
 type RestoreResult struct {
 	Device       string   `json:"device"`
 	BytesWritten int64    `json:"bytesWritten"`
@@ -131,11 +148,13 @@ type RestoreResult struct {
 	Manifest     Manifest `json:"manifest"`
 }
 
+// BackupRequest contains all inputs needed to create a backup.
 type BackupRequest struct {
 	Connection      Connection `json:"connection"`
 	OutputDirectory string     `json:"outputDirectory"`
 }
 
+// RestoreRequest contains the selected backup, target identifier, and erase confirmation.
 type RestoreRequest struct {
 	BackupPath string `json:"backupPath"`
 	Device     string `json:"device"`

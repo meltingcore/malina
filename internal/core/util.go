@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,38 +43,32 @@ func readJSON(path string, value any) error {
 	return json.Unmarshal(data, value)
 }
 
-func hashFile(path string) (string, int64, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", 0, err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	count, err := io.Copy(hash, file)
-	if err != nil {
-		return "", count, err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), count, nil
-}
-
 func prepareAtomicDirectory(parent, name string) (partialPath, finalPath string, err error) {
 	if err = os.MkdirAll(parent, 0o700); err != nil {
 		return "", "", err
 	}
-	finalPath = filepath.Join(parent, name)
-	partialPath = finalPath + ".partial"
-	if _, statErr := os.Stat(finalPath); statErr == nil {
-		return "", "", NewError("BACKUP_EXISTS", "Backup already exists: "+finalPath)
-	} else if !os.IsNotExist(statErr) {
-		return "", "", statErr
-	}
-	if err = os.RemoveAll(partialPath); err != nil {
+	for sequence := 1; sequence <= 10_000; sequence++ {
+		candidate := name
+		if sequence > 1 {
+			candidate = fmt.Sprintf("%s-%d", name, sequence)
+		}
+		finalPath = filepath.Join(parent, candidate)
+		partialPath = finalPath + ".partial"
+		if _, statErr := os.Stat(finalPath); statErr == nil {
+			continue
+		} else if !os.IsNotExist(statErr) {
+			return "", "", statErr
+		}
+		// Mkdir is the ownership claim. Never remove an existing partial path:
+		// it may belong to another concurrent or interrupted backup.
+		if err = os.Mkdir(partialPath, 0o700); err == nil {
+			return partialPath, finalPath, nil
+		} else if os.IsExist(err) {
+			continue
+		}
 		return "", "", err
 	}
-	if err = os.Mkdir(partialPath, 0o700); err != nil {
-		return "", "", err
-	}
-	return partialPath, finalPath, nil
+	return "", "", NewError("BACKUP_NAME_EXHAUSTED", "Cannot allocate a unique backup directory.")
 }
 
 type countingReader struct {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +62,26 @@ func (d testDevices) List(context.Context) ([]core.Device, error) {
 func (d testDevices) Unmount(context.Context, string) error      { return nil }
 func (d testDevices) WritablePath(device string) (string, error) { return device, nil }
 func (d testDevices) Eject(context.Context, string) bool         { return true }
+
+type blockingRestoreDevices struct {
+	device  core.Device
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (d *blockingRestoreDevices) List(context.Context) ([]core.Device, error) {
+	return []core.Device{d.device}, nil
+}
+func (d *blockingRestoreDevices) Unmount(context.Context, string) error {
+	d.once.Do(func() { close(d.entered) })
+	<-d.release
+	return nil
+}
+func (d *blockingRestoreDevices) WritablePath(string) (string, error) {
+	return d.device.Path, nil
+}
+func (*blockingRestoreDevices) Eject(context.Context, string) bool { return true }
 
 func waitForJob(t *testing.T, service *Service, id string, finished bool) core.Job {
 	t.Helper()
@@ -134,5 +155,48 @@ func TestBackgroundJobsAllowRestoreWhileBackupRuns(t *testing.T) {
 	}
 	if !bytes.Equal(written, raw) {
 		t.Fatal("restore target did not match the backup")
+	}
+}
+
+func TestStartRestoreAtomicallyReservesTarget(t *testing.T) {
+	raw := bytes.Repeat([]byte("restore-reservation"), 4096)
+	backupEngine := &core.Engine{Remote: &testRemote{data: raw}}
+	backup, err := backupEngine.Backup(context.Background(), core.BackupRequest{
+		Connection: core.Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "target.img")
+	if err := os.WriteFile(target, make([]byte, len(raw)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	devices := &blockingRestoreDevices{
+		device:  core.Device{ID: "test:target", Path: target, Name: "Test drive", Bytes: int64(len(raw)), Removable: true, Stable: true},
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	service := NewService(nil, &core.Engine{Devices: devices})
+	first, err := service.StartRestore(core.RestoreRequest{
+		BackupPath: backup.Path, Device: devices.device.ID, Confirm: devices.device.ID, Verify: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-devices.entered
+	_, err = service.StartRestore(core.RestoreRequest{
+		BackupPath: backup.Path, Device: devices.device.Path, Confirm: devices.device.Path, Verify: false,
+	})
+	if err == nil {
+		t.Fatal("second restore unexpectedly acquired the same physical target")
+	}
+	typed, ok := err.(*core.Error)
+	if !ok || typed.Code != "DEVICE_BUSY" {
+		t.Fatalf("expected DEVICE_BUSY, got %#v", err)
+	}
+	close(devices.release)
+	finished := waitForJob(t, service, first.ID, true)
+	if finished.Status != jobStatusCompleted {
+		t.Fatalf("first restore did not complete: %#v", finished)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// ListBackups returns valid complete backups, newest first.
 func ListBackups(directory string) ([]Backup, error) {
 	entries, err := os.ReadDir(directory)
 	if os.IsNotExist(err) {

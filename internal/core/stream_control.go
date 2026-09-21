@@ -14,10 +14,12 @@ type StreamControl struct {
 	resumed chan struct{}
 }
 
+// NewStreamControl returns a stream control in the running state.
 func NewStreamControl() *StreamControl {
 	return &StreamControl{}
 }
 
+// WithStreamControl attaches cooperative pause state to a context.
 func WithStreamControl(ctx context.Context, control *StreamControl) context.Context {
 	return context.WithValue(ctx, streamControlContextKey{}, control)
 }

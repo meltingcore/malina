@@ -6,12 +6,15 @@ import (
 	"time"
 )
 
+// Engine coordinates backup, verification, restore, and platform dependencies.
+// Remote, Devices, and Now are replaceable to support deterministic tests.
 type Engine struct {
 	Remote  Remote
 	Devices DeviceOperations
 	Now     func() time.Time
 }
 
+// NewEngine returns an engine backed by SSH and the current operating system.
 func NewEngine() *Engine {
 	return &Engine{
 		Remote:  NewSSHRemote(),
@@ -27,6 +30,7 @@ func (e *Engine) clock() time.Time {
 	return time.Now()
 }
 
+// Inspect discovers the remote Raspberry Pi disk layout and access capabilities.
 func (e *Engine) Inspect(ctx context.Context, connection Connection) (PiInfo, error) {
 	remote := e.Remote
 	if remote == nil {

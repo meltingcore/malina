@@ -8,15 +8,18 @@ import (
 	"os/exec"
 )
 
+// CommandResult contains captured output from a platform command.
 type CommandResult struct {
 	Stdout string
 	Stderr string
 }
 
+// CommandRunner abstracts operating-system commands for testing.
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args []string, input io.Reader) (CommandResult, error)
 }
 
+// ExecRunner runs commands with os/exec and context cancellation.
 type ExecRunner struct{}
 
 func (ExecRunner) Run(ctx context.Context, name string, args []string, input io.Reader) (CommandResult, error) {

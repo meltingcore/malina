@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -28,6 +29,7 @@ func assertSafeDevicePath(device string) error {
 	return NewError("UNSAFE_DEVICE_PATH", "Unsupported or unsafe device path: "+device)
 }
 
+// DeviceOperations abstracts destructive platform device operations.
 type DeviceOperations interface {
 	List(ctx context.Context) ([]Device, error)
 	Unmount(ctx context.Context, device string) error
@@ -35,11 +37,27 @@ type DeviceOperations interface {
 	Eject(ctx context.Context, device string) bool
 }
 
+func hardwareDeviceID(platform string, values ...string) (string, bool) {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if len(parts) == 0 {
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return fmt.Sprintf("%s:%x", platform, sum[:12]), true
+}
+
+// DeviceManager discovers, unmounts, opens, and ejects physical devices.
 type DeviceManager struct {
 	GOOS   string
 	Runner CommandRunner
 }
 
+// NewDeviceManager returns a device manager for a GOOS value.
 func NewDeviceManager(goos string) *DeviceManager {
 	return &DeviceManager{GOOS: goos, Runner: ExecRunner{}}
 }
@@ -196,15 +214,28 @@ func listLinuxDevices(mountInfoPath, sysRoot string) ([]Device, error) {
 		}
 		transport := linuxBlockTransport(sysRoot, name)
 		removable := readTrimmed(filepath.Join(base, "removable")) == "1"
-		if !removable && transport != "usb" && transport != "mmc" {
+		// USB devices commonly report removable=0 even though the whole enclosure is
+		// external. A fixed MMC device, however, is generally soldered eMMC and must
+		// never be offered as a restore destination.
+		if !removable && transport != "usb" {
 			continue
 		}
 		model := readTrimmed(filepath.Join(base, "device", "model"))
 		if model == "" {
 			model = name
 		}
+		id, stable := hardwareDeviceID("linux",
+			readTrimmed(filepath.Join(base, "wwid")),
+			readTrimmed(filepath.Join(base, "device", "wwid")),
+			readTrimmed(filepath.Join(base, "device", "serial")),
+			readTrimmed(filepath.Join(base, "device", "cid")),
+		)
+		if !stable {
+			id = path
+		}
 		devices = append(devices, Device{
-			ID: path, Path: path, Name: model, Bytes: sectors * 512, Transport: transport, Removable: true,
+			ID: id, Path: path, Name: model, Bytes: sectors * 512, Transport: transport,
+			Removable: removable || transport == "usb", Stable: stable,
 		})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Path < devices[j].Path })
@@ -239,6 +270,8 @@ type windowsDisk struct {
 	FriendlyName string `json:"FriendlyName"`
 	Size         int64  `json:"Size"`
 	BusType      string `json:"BusType"`
+	UniqueID     string `json:"UniqueId"`
+	SerialNumber string `json:"SerialNumber"`
 	IsBoot       bool   `json:"IsBoot"`
 	IsSystem     bool   `json:"IsSystem"`
 }
@@ -266,7 +299,11 @@ func parseWindowsDevices(output string) ([]Device, error) {
 		if name == "" {
 			name = fmt.Sprintf("Physical drive %d", disk.Number)
 		}
-		devices = append(devices, Device{ID: path, Path: path, Name: name, Bytes: disk.Size, Transport: strings.ToLower(bus), Removable: true})
+		id, stable := hardwareDeviceID("windows", disk.UniqueID, disk.SerialNumber)
+		if !stable {
+			id = path
+		}
+		devices = append(devices, Device{ID: id, Path: path, Name: name, Bytes: disk.Size, Transport: strings.ToLower(bus), Removable: true, Stable: stable})
 	}
 	return devices, nil
 }
@@ -304,7 +341,15 @@ func parseMacDeviceInfo(xml string) (Device, bool) {
 		transport = "external"
 	}
 	path := "/dev/" + identifier
-	return Device{ID: path, Path: path, Name: name, Bytes: bytes, Transport: transport, Removable: true}, true
+	id, stable := hardwareDeviceID("darwin",
+		plistText(xml, "MediaUUID", "string"),
+		plistText(xml, "DiskUUID", "string"),
+		plistText(xml, "VolumeUUID", "string"),
+	)
+	if !stable {
+		id = path
+	}
+	return Device{ID: id, Path: path, Name: name, Bytes: bytes, Transport: transport, Removable: true, Stable: stable}, true
 }
 
 func (m *DeviceManager) List(ctx context.Context) ([]Device, error) {
@@ -334,7 +379,7 @@ func (m *DeviceManager) List(ctx context.Context) ([]Device, error) {
 			}
 		}
 	case "windows":
-		script := `Get-Disk | Select-Object Number,FriendlyName,Size,BusType,IsBoot,IsSystem | ConvertTo-Json -Compress`
+		script := `Get-Disk | Select-Object Number,FriendlyName,Size,BusType,UniqueId,SerialNumber,IsBoot,IsSystem | ConvertTo-Json -Compress`
 		listing, runErr := m.run(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
 		if runErr != nil {
 			return nil, runErr
