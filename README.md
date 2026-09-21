@@ -26,6 +26,13 @@ unallocated gaps. Malina rejects a hybrid layout when boot and root live on diff
 because one image would not contain the whole bootable system. Raspberry Pi EEPROM bootloader
 configuration is not stored on the disk and is therefore not included.
 
+## Third-party work
+
+Besides the whole tech stack, Malina uses the following additional third-party work:
+
+* The app logo: [Fruit icons created by Magnific](https://www.flaticon.com/free-icons/fruit)
+* The color pallette: [Enchanted Cherry Forest](https://coolors.co/palette/eaf2ef-912f56-521945-361f27-0d090a)
+
 ## Requirements
 
 Development computer:
