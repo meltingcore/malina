@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Malina raspberry mark">
+  <path d="M31.8 18.2c-3.8-7.6-11-8.5-16.2-6.3 2.2 5.6 7.6 9.4 16.2 6.3Z" fill="#487b58"/>
+  <path d="M33 17.8c3.3-7.2 10.1-9 15.6-6.5-2 5.4-7.4 9-15.6 6.5Z" fill="#66986f"/>
+  <g fill="#a72b58" stroke="#7d1f42" stroke-width="1.2">
+    <circle cx="22" cy="27" r="9"/><circle cx="32" cy="25" r="9"/><circle cx="42" cy="27" r="9"/>
+    <circle cx="18.5" cy="37" r="8.5"/><circle cx="28" cy="36" r="9"/><circle cx="38" cy="36" r="9"/><circle cx="45.5" cy="38" r="8.5"/>
+    <circle cx="24" cy="46" r="8"/><circle cx="34" cy="46" r="9"/><circle cx="42" cy="46" r="7"/><circle cx="32" cy="53" r="6"/>
+  </g>
+  <g fill="#df7197" opacity=".5"><circle cx="19" cy="24" r="2"/><circle cx="30" cy="22.5" r="2"/><circle cx="16" cy="34" r="1.8"/><circle cx="25" cy="33" r="1.8"/></g>
+</svg>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Malina creates compressed, whole-device Raspberry Pi backups over SSH and safely restores them to removable media.">
+    <meta name="theme-color" content="#fbf8f4">
+    <meta property="og:title" content="Malina — Whole-device Raspberry Pi backups">
+    <meta property="og:description" content="Back up a live Raspberry Pi over SSH. Restore with verification and guardrails.">
+    <meta property="og:type" content="website">
+    <title>Malina — Whole-device Raspberry Pi backups</title>
+    <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Malina home">
+        <img src="assets/mark.svg" width="32" height="32" alt="">
+        <span>Malina</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="sr-only">Toggle navigation</span><i></i><i></i>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#app">The app</a>
+        <a href="#safety">Safety</a>
+        <a href="#download">Download</a>
+        <a class="nav-github" href="https://github.com/meltingcore/malina">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="top" class="hero shell">
+        <div class="hero-copy">
+          <a class="release-pill" href="https://github.com/meltingcore/malina/releases" data-release-label>
+            <i></i> Malina v0.1 preview is available <b aria-hidden="true">→</b>
+          </a>
+          <h1>Your whole Pi,<br><em>backed up.</em></h1>
+          <p>Create a compressed, bit-for-bit image of a running Raspberry Pi over SSH. Restore it to removable media with verification built in.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="#download" data-primary-download>Download Malina</a>
+            <a class="button secondary" href="https://github.com/meltingcore/malina">View on GitHub <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="platforms" aria-label="Supported platforms"><span>macOS</span><i></i><span>Windows</span><i></i><span>Linux</span><i></i><span>CLI included</span></div>
+        </div>
+        <div class="hero-product">
+          <div class="product-glow"></div>
+          <div class="screenshot-frame hero-frame">
+            <div class="frame-top"><span></span><span></span><span></span><b>Malina</b></div>
+            <img src="assets/screenshots/backup.png" width="1280" height="733" alt="Malina's Backup screen showing SSH authentication and backup destination controls">
+          </div>
+          <div class="verified"><span>✓</span><small>Backup integrity</small><b>SHA-256 verified</b></div>
+        </div>
+      </section>
+
+      <section class="proof" aria-label="Highlights">
+        <div><b>SSH native</b><span>No agent on your Pi</span></div>
+        <div><b>Whole device</b><span>Boot sectors included</span></div>
+        <div><b>SHA-256</b><span>Every image verified</span></div>
+        <div><b>Open source</b><span>Inspect every line</span></div>
+      </section>
+
+      <section id="features" class="section shell">
+        <div class="section-heading">
+          <span class="eyebrow">Built for the entire disk</span>
+          <h2>Not just your files.<br><em>Your bootable system.</em></h2>
+          <p>Malina captures the partition table, boot sectors, operating system, applications and data in a single portable image.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature wide">
+            <span class="number">01</span>
+            <div><h3>Back up over SSH</h3><p>Connect with your existing SSH key, agent or password. Nothing needs to be installed on the Raspberry Pi.</p></div>
+            <div class="route" aria-hidden="true">
+              <div><span>π</span><b>raspberrypi</b><small>Online</small></div>
+              <p><small>encrypted SSH</small><i></i></p>
+              <div><span>GZ</span><b>disk.img.gz</b><small>Compressed</small></div>
+            </div>
+          </article>
+          <article class="feature"><span class="number">02</span><span class="feature-icon">#</span><h3>Trust, then restore</h3><p>Checksums are recorded during backup and checked before a destination is opened.</p></article>
+          <article class="feature"><span class="number">03</span><span class="feature-icon green">Ⅱ</span><h3>Stay in control</h3><p>Run concurrent jobs with live progress. Pause, resume or cancel from one clear queue.</p></article>
+          <article class="feature wide dark">
+            <span class="number">04</span>
+            <div><h3>Desktop comfort.<br>CLI precision.</h3><p>Use the native interface day to day, or automate the same Go engine from your terminal.</p></div>
+            <pre><code><span>$</span> malina backup \
+  --host pi@home \
+  --output ~/Backups
+
+<b>✓</b> source  /dev/mmcblk0
+<b>✓</b> sha256  verified</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="app" class="app-showcase section">
+        <div class="shell">
+          <div class="section-heading centered light">
+            <span class="eyebrow">The real Malina app</span>
+            <h2>Simple when it should be.<br><em>Explicit when it matters.</em></h2>
+            <p>Native controls guide you from connection to capture and guarded restore without hiding what happens to your disks.</p>
+          </div>
+          <div class="showcase-tabs" role="tablist" aria-label="Malina app screenshots">
+            <button class="active" type="button" role="tab" aria-selected="true" data-screen="backup"><span>01</span> Backup</button>
+            <button type="button" role="tab" aria-selected="false" data-screen="restore"><span>02</span> Restore</button>
+            <button type="button" role="tab" aria-selected="false" data-screen="jobs"><span>03</span> Jobs</button>
+          </div>
+          <div class="showcase-frame">
+            <div class="frame-top"><span></span><span></span><span></span><b>Malina</b></div>
+            <img class="active" data-screen-image="backup" src="assets/screenshots/backup.png" width="1280" height="733" alt="Malina Backup screen">
+            <img data-screen-image="restore" src="assets/screenshots/restore.png" width="1280" height="733" alt="Malina Restore screen">
+            <img data-screen-image="jobs" src="assets/screenshots/jobs.png" width="1280" height="733" alt="Malina Jobs screen">
+          </div>
+          <div class="showcase-copy" aria-live="polite">
+            <p class="active" data-screen-copy="backup"><b>Back up remotely.</b> Identify the Pi's source disk over SSH, choose a local folder, and stream the complete device without writing to it.</p>
+            <p data-screen-copy="restore"><b>Restore deliberately.</b> Select a verified Malina image and a discovered removable target before any destructive action begins.</p>
+            <p data-screen-copy="jobs"><b>See every operation.</b> Search and filter active or completed backups and restores from the native job queue.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell process">
+        <div class="section-heading centered">
+          <span class="eyebrow">Three deliberate steps</span>
+          <h2>From running Pi to<br><em>restorable image.</em></h2>
+        </div>
+        <ol>
+          <li><span>1</span><div><b>Connect</b><p>Enter the Pi's SSH address and use your existing authentication.</p></div></li>
+          <li><span>2</span><div><b>Capture</b><p>Malina reads, compresses and calculates checksums as it streams.</p></div></li>
+          <li><span>3</span><div><b>Restore</b><p>Choose a verified image and an explicitly discovered removable drive.</p></div></li>
+        </ol>
+      </section>
+
+      <section id="safety" class="section shell safety-wrap">
+        <div class="safety">
+          <div>
+            <span class="eyebrow">Guardrails, not guesswork</span>
+            <h2>Restore with<br><em>confidence.</em></h2>
+            <p>Disk restores are powerful. Malina makes the destructive step explicit and verifies the backup before opening the target.</p>
+            <a href="https://github.com/meltingcore/malina#safety-boundaries">Read the safety boundaries <span aria-hidden="true">→</span></a>
+          </div>
+          <ul>
+            <li><span>✓</span><div><b>Removable drives only</b><p>Internal and system disks are excluded from destination discovery.</p></div></li>
+            <li><span>✓</span><div><b>Exact-path confirmation</b><p>The selected target identifier is required again before erasing.</p></div></li>
+            <li><span>✓</span><div><b>Full read-back option</b><p>Verify every written byte before automatically ejecting the drive.</p></div></li>
+            <li><span>✓</span><div><b>No partial backups</b><p>Failed captures are cleaned up instead of looking complete.</p></div></li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="download" class="section shell download">
+        <div class="section-heading centered">
+          <span class="eyebrow">Open source · Preview release</span>
+          <h2>Pick your platform.</h2>
+          <p>Every archive includes the native desktop app and command-line interface.</p>
+        </div>
+        <div class="download-grid">
+          <article data-platform-card="macos"><span class="os dark-dot">●</span><div><h3>macOS</h3><p>Universal · Apple Silicon + Intel</p></div><a href="https://github.com/meltingcore/malina/releases" data-download="macos">View releases <span>↓</span></a></article>
+          <article data-platform-card="windows"><span class="os windows">⊞</span><div><h3>Windows</h3><p>Windows 10/11 · x64</p></div><a href="https://github.com/meltingcore/malina/releases" data-download="windows">View releases <span>↓</span></a></article>
+          <article data-platform-card="linux"><span class="os linux">⌁</span><div><h3>Linux</h3><p>Desktop + CLI · amd64</p></div><a href="https://github.com/meltingcore/malina/releases" data-download="linux">View releases <span>↓</span></a></article>
+        </div>
+        <div class="notice"><span>i</span><p><b>Preview software:</b> macOS builds are ad-hoc signed and Windows builds are currently unsigned. Your operating system may show an additional confirmation. Review the <a href="https://github.com/meltingcore/malina/releases">release notes and checksums</a> before installing.</p></div>
+      </section>
+
+      <section class="final-cta shell">
+        <img src="assets/mark.svg" width="68" height="68" alt="">
+        <span class="eyebrow">Keep a complete way back</span>
+        <h2>Your Pi has a lot on it.<br><em>Back up all of it.</em></h2>
+        <div class="hero-actions"><a class="button primary" href="#download">Download Malina</a><a class="text-link" href="https://github.com/meltingcore/malina">Star on GitHub <span>↗</span></a></div>
+      </section>
+    </main>
+
+    <footer class="site-footer shell">
+      <a class="brand" href="#top"><img src="assets/mark.svg" width="28" height="28" alt=""><span>Malina</span></a>
+      <p>Whole-device backup and restore for Raspberry Pi.</p>
+      <nav aria-label="Footer navigation"><a href="https://github.com/meltingcore/malina">GitHub</a><a href="https://github.com/meltingcore/malina/releases">Releases</a><a href="https://github.com/meltingcore/malina/blob/main/LICENSE">License</a></nav>
+      <small>© <span id="year">2026</span> meltingcore</small>
+    </footer>
+  </body>
+</html>
