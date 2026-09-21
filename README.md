@@ -26,6 +26,14 @@ unallocated gaps. Malina rejects a hybrid layout when boot and root live on diff
 because one image would not contain the whole bootable system. Raspberry Pi EEPROM bootloader
 configuration is not stored on the disk and is therefore not included.
 
+Password, private-key, and SSH-agent authentication use Malina's bundled Go SSH client. Disk access
+is attempted in this order: direct read, passwordless `sudo`, then password-backed `sudo`. With SSH
+password authentication, the connection password is reused. With key or agent authentication, the
+app asks for the Pi account password only if the first two access methods fail. If all three methods
+fail, the backup stops with the remote error. Passwords remain in memory only for the active
+operation and are never written to settings, manifests, or logs. Malina remembers first-seen host
+keys in its user configuration directory and rejects changed keys.
+
 ## Third-party work
 
 Besides the whole tech stack, Malina uses the following additional third-party work:
@@ -49,13 +57,13 @@ Raspberry Pi:
 - `dd` supporting POSIX operands, plus `sync`
 - Direct permission to read the source disk, or `sudo` access
 
-Password, private-key, and SSH-agent authentication use Malina's bundled Go SSH client. Disk access
-is attempted in this order: direct read, passwordless `sudo`, then password-backed `sudo`. With SSH
-password authentication, the connection password is reused. With key or agent authentication, the
-app asks for the Pi account password only if the first two access methods fail. If all three methods
-fail, the backup stops with the remote error. Passwords remain in memory only for the active
-operation and are never written to settings, manifests, or logs. Malina remembers first-seen host
-keys in its user configuration directory and rejects changed keys.
+## Install on macOS
+
+Install the desktop app and the `malina` command-line tool from the official Homebrew tap:
+
+```sh
+brew install --cask meltingcore/tap/malina
+```
 
 ## Develop and build
 
