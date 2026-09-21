@@ -50,7 +50,7 @@ func TestBackupVerifyAndRestoreRoundTrip(t *testing.T) {
 	raw := bytes.Repeat([]byte("malina-raw-disk\x00"), 4096)
 	engine := testEngine(raw)
 	backup, err := engine.Backup(context.Background(), BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestIncompleteBackupRemovesPartialDirectory(t *testing.T) {
 	engine.Remote.(*fakeRemote).info.DiskSize++
 	parent := t.TempDir()
 	_, err := engine.Backup(context.Background(), BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: parent,
+		Connection: Connection{Host: "user@host"}, OutputDirectory: parent,
 	}, nil)
 	assertErrorCode(t, err, "INCOMPLETE_IMAGE")
 	entries, readErr := os.ReadDir(parent)
@@ -115,7 +115,7 @@ func TestCancelledBackupRemovesPartialDirectory(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := engine.Backup(ctx, BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: parent,
+		Connection: Connection{Host: "user@host"}, OutputDirectory: parent,
 	}, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
@@ -132,7 +132,7 @@ func TestCancelledBackupRemovesPartialDirectory(t *testing.T) {
 func TestRestoreVerifiesBeforeOpeningDestination(t *testing.T) {
 	engine := testEngine([]byte("valid image content"))
 	backup, err := engine.Backup(context.Background(), BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestBackupPropagatesRemoteWaitFailure(t *testing.T) {
 	engine := testEngine([]byte("disk"))
 	engine.Remote.(*fakeRemote).waitErr = errors.New("ssh stopped")
 	_, err := engine.Backup(context.Background(), BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	}, nil)
 	if err == nil || err.Error() != "ssh stopped" {
 		t.Fatalf("expected wait error, got %v", err)
@@ -182,7 +182,7 @@ func TestRestoreRequiresExactConfirmation(t *testing.T) {
 func TestLoadBackupRejectsUnsafeImageMetadata(t *testing.T) {
 	engine := testEngine([]byte("disk image"))
 	backup, err := engine.Backup(context.Background(), BackupRequest{
-		Connection: Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +198,7 @@ func TestLoadBackupRejectsUnsafeImageMetadata(t *testing.T) {
 func TestBackupNeverPersistsSSHPassword(t *testing.T) {
 	engine := testEngine([]byte("disk image"))
 	backup, err := engine.Backup(context.Background(), BackupRequest{
-		Connection:      Connection{Host: "pi@raspberrypi.local", Password: "never-write-this"},
+		Connection:      Connection{Host: "user@host", Password: "never-write-this"},
 		OutputDirectory: t.TempDir(),
 	}, nil)
 	if err != nil {

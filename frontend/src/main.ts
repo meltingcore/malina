@@ -37,6 +37,10 @@ const restoreConfirmImage = element<HTMLElement>("restore-confirm-image");
 const restoreConfirmTarget = element<HTMLElement>("restore-confirm-target");
 const cancelRestoreConfirmButton = element<HTMLButtonElement>("cancel-restore-confirm");
 const confirmRestoreButton = element<HTMLButtonElement>("confirm-restore");
+const sudoPasswordOverlay = element<HTMLElement>("sudo-password-overlay");
+const sudoPasswordForm = element<HTMLFormElement>("sudo-password-form");
+const sudoPasswordPromptInput = element<HTMLInputElement>("sudo-password");
+const cancelSudoPasswordButton = element<HTMLButtonElement>("cancel-sudo-password");
 const operation = element<HTMLElement>("operation");
 const operationTitle = element<HTMLElement>("operation-title");
 const operationDetail = element<HTMLElement>("operation-detail");
@@ -97,6 +101,7 @@ let availableDevices: Device[] = [];
 let devicesLoaded = false;
 let busy = false;
 let connectionCheck: ReturnType<typeof Service.Inspect> | null = null;
+let resolveSudoPassword: ((password: string | null) => void) | null = null;
 let currentJobFilter: JobFilter = "all";
 let selectedJobID = "";
 const jobs = new Map<string, JobRuntime>();
@@ -177,6 +182,7 @@ const connection = (): Connection => {
     port,
     identity: authMethod() === "key" ? identityPath || undefined : undefined,
     password: authMethod() === "password" ? passwordInput.value : undefined,
+    useDefaultKeys: authMethod() === "key" && !identityPath ? true : undefined,
   };
 };
 
@@ -226,6 +232,34 @@ const closeHelp = (): void => {
   helpButton.focus();
 };
 
+const closeSudoPasswordPrompt = (password: string | null): void => {
+  sudoPasswordOverlay.classList.add("hidden");
+  sudoPasswordOverlay.hidden = true;
+  sudoPasswordPromptInput.value = "";
+  const resolve = resolveSudoPassword;
+  resolveSudoPassword = null;
+  resolve?.(password);
+};
+
+const promptForSudoPassword = (): Promise<string | null> => {
+  sudoPasswordPromptInput.value = "";
+  sudoPasswordOverlay.hidden = false;
+  sudoPasswordOverlay.classList.remove("hidden");
+  window.setTimeout(() => sudoPasswordPromptInput.focus(), 0);
+  return new Promise((resolve) => { resolveSudoPassword = resolve; });
+};
+
+sudoPasswordForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!sudoPasswordPromptInput.value) return;
+  closeSudoPasswordPrompt(sudoPasswordPromptInput.value);
+});
+
+cancelSudoPasswordButton.addEventListener("click", () => closeSudoPasswordPrompt(null));
+sudoPasswordOverlay.addEventListener("click", (event) => {
+  if (event.target === sudoPasswordOverlay) closeSudoPasswordPrompt(null);
+});
+
 helpButton.addEventListener("click", openHelp);
 closeHelpButton.addEventListener("click", closeHelp);
 helpOverlay.addEventListener("click", (event) => {
@@ -234,7 +268,8 @@ helpOverlay.addEventListener("click", (event) => {
 
 const describePi = (info: PiInfo): string => {
   const warning = info.warnings?.length ? ` ${info.warnings.join(" ")}` : "";
-  return `${info.supported ? "Ready" : "Unavailable"} · ${info.hostname} · ${formatBytes(info.diskSize)} · ${info.rootDisk}.${warning}`;
+  const access = info.sudoPasswordNeeded ? " · sudo password required for backup" : "";
+  return `${info.supported ? "Ready" : "Unavailable"} · ${info.hostname} · ${formatBytes(info.diskSize)} · ${info.rootDisk}${access}.${warning}`;
 };
 
 const setConnectionStatus = (info: PiInfo): void => {
@@ -635,6 +670,7 @@ document.querySelectorAll<HTMLInputElement>('input[name="auth-method"]').forEach
   radio.addEventListener("change", () => {
     element<HTMLElement>("key-auth").classList.toggle("hidden", authMethod() !== "key");
     element<HTMLElement>("password-auth").classList.toggle("hidden", authMethod() !== "password");
+    passwordInput.value = "";
     resetConnectionStatus();
   });
 });
@@ -714,7 +750,19 @@ backupForm.addEventListener("submit", (event) => {
   event.preventDefault();
   void runOperation(async () => {
     if (!outputDirectory) throw new Error("Choose a folder for the backup.");
-    const job = await Service.StartBackup({ connection: connection(), outputDirectory });
+    let sourceConnection = connection();
+    if (authMethod() === "key") {
+      setConnectionMessage("Checking disk access…");
+      const info = await Service.Inspect(sourceConnection);
+      setConnectionStatus(info);
+      if (!info.supported) throw new Error(info.warnings?.join(" ") || "The source disk cannot be read with this account.");
+      if (info.sudoPasswordNeeded) {
+        const sudoPassword = await promptForSudoPassword();
+        if (sudoPassword === null) return;
+        sourceConnection = { ...sourceConnection, sudoPassword };
+      }
+    }
+    const job = await Service.StartBackup({ connection: sourceConnection, outputDirectory });
     passwordInput.value = "";
     upsertJob(job);
     switchView("jobs-view");
@@ -781,6 +829,10 @@ restoreConfirmOverlay.addEventListener("click", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (!sudoPasswordOverlay.hidden) {
+    closeSudoPasswordPrompt(null);
+    return;
+  }
   if (!helpOverlay.hidden) {
     closeHelp();
     return;

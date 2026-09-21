@@ -9,10 +9,12 @@ const (
 )
 
 type Connection struct {
-	Host     string `json:"host"`
-	Identity string `json:"identity,omitempty"`
-	Password string `json:"password,omitempty"`
-	Port     int    `json:"port,omitempty"`
+	Host           string `json:"host"`
+	Identity       string `json:"identity,omitempty"`
+	Password       string `json:"password,omitempty"`
+	SudoPassword   string `json:"sudoPassword,omitempty"`
+	Port           int    `json:"port,omitempty"`
+	UseDefaultKeys bool   `json:"useDefaultKeys,omitempty"`
 }
 
 type Progress struct {
@@ -47,20 +49,23 @@ type Job struct {
 }
 
 type PiInfo struct {
-	Hostname          string   `json:"hostname"`
-	Model             string   `json:"model"`
-	OS                string   `json:"os"`
-	Architecture      string   `json:"architecture"`
-	RootSource        string   `json:"rootSource"`
-	RootDisk          string   `json:"rootDisk"`
-	RootFilesystem    string   `json:"rootFilesystem"`
-	BootSource        string   `json:"bootSource,omitempty"`
-	BootDisk          string   `json:"bootDisk,omitempty"`
-	DiskSize          int64    `json:"diskSize"`
-	LogicalSectorSize int64    `json:"logicalSectorSize,omitempty"`
-	SudoAvailable     bool     `json:"sudoAvailable"`
-	Supported         bool     `json:"supported"`
-	Warnings          []string `json:"warnings"`
+	Hostname           string   `json:"hostname"`
+	Model              string   `json:"model"`
+	OS                 string   `json:"os"`
+	Architecture       string   `json:"architecture"`
+	RootSource         string   `json:"rootSource"`
+	RootDisk           string   `json:"rootDisk"`
+	RootFilesystem     string   `json:"rootFilesystem"`
+	BootSource         string   `json:"bootSource,omitempty"`
+	BootDisk           string   `json:"bootDisk,omitempty"`
+	DiskSize           int64    `json:"diskSize"`
+	LogicalSectorSize  int64    `json:"logicalSectorSize,omitempty"`
+	SudoAvailable      bool     `json:"sudoAvailable"`
+	DirectDiskAccess   bool     `json:"directDiskAccess"`
+	PasswordlessSudo   bool     `json:"passwordlessSudo"`
+	SudoPasswordNeeded bool     `json:"sudoPasswordNeeded"`
+	Supported          bool     `json:"supported"`
+	Warnings           []string `json:"warnings"`
 }
 
 type Manifest struct {

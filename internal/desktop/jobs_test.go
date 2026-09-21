@@ -86,7 +86,7 @@ func TestBackgroundJobsAllowRestoreWhileBackupRuns(t *testing.T) {
 	raw := bytes.Repeat([]byte("malina-job-data"), 8192)
 	backupEngine := &core.Engine{Remote: &testRemote{data: raw}}
 	backup, err := backupEngine.Backup(context.Background(), core.BackupRequest{
-		Connection: core.Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: core.Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestBackgroundJobsAllowRestoreWhileBackupRuns(t *testing.T) {
 	})
 
 	backupJob, err := service.StartBackup(core.BackupRequest{
-		Connection: core.Connection{Host: "pi@raspberrypi.local"}, OutputDirectory: t.TempDir(),
+		Connection: core.Connection{Host: "user@host"}, OutputDirectory: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatal(err)

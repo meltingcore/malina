@@ -15,7 +15,9 @@ export interface Connection {
     "host": string;
     "identity"?: string;
     "password"?: string;
+    "sudoPassword"?: string;
     "port"?: number;
+    "useDefaultKeys"?: boolean;
 }
 
 export interface Device {
@@ -92,6 +94,9 @@ export interface PiInfo {
     "diskSize": number;
     "logicalSectorSize"?: number;
     "sudoAvailable": boolean;
+    "directDiskAccess": boolean;
+    "passwordlessSudo": boolean;
+    "sudoPasswordNeeded": boolean;
     "supported": boolean;
     "warnings": string[] | null;
 }

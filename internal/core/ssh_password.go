@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 var knownHostsMu sync.Mutex
 
-func passwordSSHAddress(connection Connection) (username, address string, err error) {
+func sshAddress(connection Connection) (username, address string, err error) {
 	if err := validateConnection(connection); err != nil {
 		return "", "", err
 	}
@@ -32,7 +33,7 @@ func passwordSSHAddress(connection Connection) (username, address string, err er
 	} else {
 		currentUser, userErr := user.Current()
 		if userErr != nil || currentUser.Username == "" {
-			return "", "", NewError("SSH_USER_REQUIRED", "Include the SSH user in the address, for example pi@raspberrypi.local.")
+			return "", "", NewError("SSH_USER_REQUIRED", "Include the SSH user in the address, for example john@192.168.0.112")
 		}
 		username = currentUser.Username
 	}
@@ -90,8 +91,69 @@ func malinaHostKeyCallback() (ssh.HostKeyCallback, error) {
 	}, nil
 }
 
-func dialPasswordSSH(ctx context.Context, connection Connection) (*ssh.Client, error) {
-	username, address, err := passwordSSHAddress(connection)
+func privateKeySigner(path, password string) (ssh.Signer, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(contents)
+	if err == nil {
+		return signer, nil
+	}
+	var passphraseMissing *ssh.PassphraseMissingError
+	if password != "" && errors.As(err, &passphraseMissing) {
+		return ssh.ParsePrivateKeyWithPassphrase(contents, []byte(password))
+	}
+	return nil, err
+}
+
+func defaultIdentityPaths() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{
+		filepath.Join(home, ".ssh", "id_ed25519"),
+		filepath.Join(home, ".ssh", "id_ecdsa"),
+		filepath.Join(home, ".ssh", "id_rsa"),
+	}
+}
+
+func sshAuthMethods(connection Connection) ([]ssh.AuthMethod, []io.Closer, error) {
+	methods := make([]ssh.AuthMethod, 0, 3)
+	closers := make([]io.Closer, 0, 1)
+
+	if connection.Identity != "" {
+		signer, err := privateKeySigner(connection.Identity, connection.Password)
+		if err != nil {
+			return nil, nil, WrapError("SSH_KEY_FAILED", "Cannot use the selected SSH private key: "+err.Error(), err)
+		}
+		methods = append(methods, ssh.PublicKeys(signer))
+	} else if connection.UseDefaultKeys || connection.Password == "" {
+		if socket := os.Getenv("SSH_AUTH_SOCK"); socket != "" {
+			if connectionSocket, err := net.Dial("unix", socket); err == nil {
+				methods = append(methods, ssh.PublicKeysCallback(agent.NewClient(connectionSocket).Signers))
+				closers = append(closers, connectionSocket)
+			}
+		}
+		for _, path := range defaultIdentityPaths() {
+			signer, err := privateKeySigner(path, "")
+			if err == nil {
+				methods = append(methods, ssh.PublicKeys(signer))
+			}
+		}
+	}
+	if connection.Password != "" {
+		methods = append(methods, ssh.Password(connection.Password))
+	}
+	if len(methods) == 0 {
+		return nil, closers, NewError("SSH_AUTH_REQUIRED", "No usable SSH key or agent was found. Choose a private key or use password authentication.")
+	}
+	return methods, closers, nil
+}
+
+func dialSSH(ctx context.Context, connection Connection) (*ssh.Client, error) {
+	username, address, err := sshAddress(connection)
 	if err != nil {
 		return nil, err
 	}
@@ -99,9 +161,18 @@ func dialPasswordSSH(ctx context.Context, connection Connection) (*ssh.Client, e
 	if err != nil {
 		return nil, err
 	}
+	auth, authClosers, err := sshAuthMethods(connection)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		for _, closer := range authClosers {
+			_ = closer.Close()
+		}
+	}()
 	config := &ssh.ClientConfig{
 		User:            username,
-		Auth:            []ssh.AuthMethod{ssh.Password(connection.Password)},
+		Auth:            auth,
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         15 * time.Second,
 	}
@@ -109,17 +180,25 @@ func dialPasswordSSH(ctx context.Context, connection Connection) (*ssh.Client, e
 	if err != nil {
 		return nil, WrapError("SSH_CONNECTION_FAILED", "Cannot connect to the Raspberry Pi: "+err.Error(), err)
 	}
+	handshakeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = connectionSocket.Close()
+		case <-handshakeDone:
+		}
+	}()
 	clientConnection, channels, requests, err := ssh.NewClientConn(connectionSocket, address, config)
+	close(handshakeDone)
 	if err != nil {
 		_ = connectionSocket.Close()
-		message := "SSH authentication failed. Check the address, user, and password."
-		return nil, WrapError("SSH_AUTH_FAILED", message, err)
+		return nil, WrapError("SSH_AUTH_FAILED", "SSH authentication failed. Check the address and credentials.", err)
 	}
 	return ssh.NewClient(clientConnection, channels, requests), nil
 }
 
-func runPasswordSSH(ctx context.Context, connection Connection, command string, input io.Reader) (CommandResult, error) {
-	client, err := dialPasswordSSH(ctx, connection)
+func runSSH(ctx context.Context, connection Connection, command string, input io.Reader) (CommandResult, error) {
+	client, err := dialSSH(ctx, connection)
 	if err != nil {
 		return CommandResult{}, err
 	}
@@ -155,7 +234,7 @@ func runPasswordSSH(ctx context.Context, connection Connection, command string, 
 	return result, nil
 }
 
-type passwordDiskStream struct {
+type sshClientDiskStream struct {
 	stdout  io.Reader
 	session *ssh.Session
 	client  *ssh.Client
@@ -164,9 +243,9 @@ type passwordDiskStream struct {
 	stderr  *bytes.Buffer
 }
 
-func (s *passwordDiskStream) Read(buffer []byte) (int, error) { return s.stdout.Read(buffer) }
+func (s *sshClientDiskStream) Read(buffer []byte) (int, error) { return s.stdout.Read(buffer) }
 
-func (s *passwordDiskStream) finish() {
+func (s *sshClientDiskStream) finish() {
 	s.once.Do(func() {
 		close(s.done)
 		_ = s.session.Close()
@@ -174,26 +253,38 @@ func (s *passwordDiskStream) finish() {
 	})
 }
 
-func (s *passwordDiskStream) Close() error {
+func (s *sshClientDiskStream) Close() error {
 	s.finish()
 	return nil
 }
 
-func (s *passwordDiskStream) Wait() error {
+func (s *sshClientDiskStream) Wait() error {
 	err := s.session.Wait()
 	s.finish()
 	if err == nil {
 		return nil
 	}
+	detail := strings.TrimSpace(s.stderr.String())
+	lowerDetail := strings.ToLower(detail)
+	if strings.Contains(lowerDetail, "requires a sudo password") {
+		return WrapError("SUDO_PASSWORD_REQUIRED", "Cannot read the source disk directly or with passwordless sudo. Enter the Raspberry Pi account password and try again.", err)
+	}
+	if strings.Contains(lowerDetail, "incorrect password") ||
+		strings.Contains(lowerDetail, "a password is required") ||
+		strings.Contains(lowerDetail, "no password was provided") ||
+		strings.Contains(lowerDetail, "authentication failure") ||
+		strings.Contains(lowerDetail, "sorry, try again") {
+		return WrapError("SUDO_AUTH_FAILED", "Cannot read the source disk. The Raspberry Pi account password was not accepted by sudo: "+detail, err)
+	}
 	message := "SSH disk stream failed: " + err.Error()
-	if detail := strings.TrimSpace(s.stderr.String()); detail != "" {
+	if detail != "" {
 		message += ": " + detail
 	}
 	return WrapError("COMMAND_FAILED", message, err)
 }
 
-func openPasswordDisk(ctx context.Context, connection Connection, command string) (DiskStream, error) {
-	client, err := dialPasswordSSH(ctx, connection)
+func openSSHDisk(ctx context.Context, connection Connection, command string, input io.Reader) (DiskStream, error) {
+	client, err := dialSSH(ctx, connection)
 	if err != nil {
 		return nil, err
 	}
@@ -209,13 +300,14 @@ func openPasswordDisk(ctx context.Context, connection Connection, command string
 		return nil, WrapError("SSH_COMMAND_FAILED", "Cannot open the SSH disk stream.", err)
 	}
 	stderr := &bytes.Buffer{}
+	session.Stdin = input
 	session.Stderr = stderr
 	if err := session.Start(command); err != nil {
 		_ = session.Close()
 		_ = client.Close()
 		return nil, WrapError("SSH_COMMAND_FAILED", "Cannot start the SSH disk stream.", err)
 	}
-	stream := &passwordDiskStream{stdout: stdout, session: session, client: client, done: make(chan struct{}), stderr: stderr}
+	stream := &sshClientDiskStream{stdout: stdout, session: session, client: client, done: make(chan struct{}), stderr: stderr}
 	go func() {
 		select {
 		case <-ctx.Done():

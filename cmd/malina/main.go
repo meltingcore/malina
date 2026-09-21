@@ -16,8 +16,8 @@ import (
 const usage = `malina — live whole-device backup for Raspberry Pi
 
 Usage:
-  malina inspect --host pi@raspberrypi.local [--identity PATH | --password] [--port 22]
-  malina backup --host pi@raspberrypi.local --output DIRECTORY [--identity PATH | --password]
+  malina inspect --host user@host [--identity PATH] [--password] [--port 22]
+  malina backup --host user@host --output DIRECTORY [--identity PATH] [--password]
   malina backups --output DIRECTORY
   malina verify BACKUP_DIRECTORY
   malina devices
@@ -34,7 +34,7 @@ func connectionFlags(set *flag.FlagSet) (*string, *string, *int, *bool) {
 	host := set.String("host", "", "Raspberry Pi SSH address")
 	identity := set.String("identity", "", "SSH private key path")
 	port := set.Int("port", 0, "SSH port")
-	password := set.Bool("password", false, "Prompt for the SSH password")
+	password := set.Bool("password", false, "Prompt for the SSH account password (also used for sudo)")
 	return host, identity, port, password
 }
 
@@ -42,15 +42,12 @@ func connection(host, identity string, port int, promptForPassword bool) (core.C
 	if identity != "" {
 		identity, _ = filepath.Abs(identity)
 	}
-	if identity != "" && promptForPassword {
-		return core.Connection{}, core.NewError("AUTH_CONFLICT", "Choose either --identity or --password, not both.")
-	}
 	password := ""
 	if promptForPassword {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return core.Connection{}, core.NewError("PASSWORD_PROMPT_FAILED", "SSH password prompting requires an interactive terminal.")
 		}
-		fmt.Fprint(os.Stderr, "SSH password: ")
+		fmt.Fprint(os.Stderr, "SSH account password: ")
 		value, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Fprintln(os.Stderr)
 		if err != nil {

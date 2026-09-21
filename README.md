@@ -12,7 +12,7 @@ snapshot—files can change during capture.
 - Native Wails desktop app for macOS, Windows, and Linux
 - Go CLI for scripting and headless use
 - Native file and folder pickers for keys, backup locations, and restore images
-- Remote Pi inspection over OpenSSH
+- Remote Pi inspection over Malina's bundled SSH client
 - SSH key/agent authentication or an in-memory password
 - Background job queue with pause, resume, cancel, and live details for concurrent backup and
   restore work
@@ -34,18 +34,21 @@ Development computer:
 - Node.js 20.19 or newer and pnpm
 - Wails v3 CLI (the project is pinned to `v3.0.0-beta.23`)
 - Platform build tools required by Wails
-- OpenSSH client available as `ssh`
 
 Raspberry Pi:
 
 - SSH enabled, with either key or password authentication
-- `findmnt`, `lsblk`, `dd`, and `sync`
-- Passwordless `sudo`, or direct root SSH access
+- Linux with `/proc` and `/sys` mounted
+- `dd` supporting POSIX operands, plus `sync`
+- Direct permission to read the source disk, or `sudo` access
 
-Key authentication uses the system OpenSSH client in batch mode. Password authentication uses Go's
-SSH client; the password remains in memory only for the active operation and is never written to
-settings, manifests, or logs. Malina remembers first-seen host keys in its user configuration
-directory and rejects changed keys.
+Password, private-key, and SSH-agent authentication use Malina's bundled Go SSH client. Disk access
+is attempted in this order: direct read, passwordless `sudo`, then password-backed `sudo`. With SSH
+password authentication, the connection password is reused. With key or agent authentication, the
+app asks for the Pi account password only if the first two access methods fail. If all three methods
+fail, the backup stops with the remote error. Passwords remain in memory only for the active
+operation and are never written to settings, manifests, or logs. Malina remembers first-seen host
+keys in its user configuration directory and rejects changed keys.
 
 ## Develop and build
 
@@ -68,18 +71,32 @@ Outputs are written to `bin/`. Run all checks with:
 wails3 task test
 ```
 
+## Releases
+
+Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Pull requests and updates to `main` run the
+Go and frontend checks automatically. Pushing a stable semantic-version tag such as `v0.1.0`
+builds Linux amd64, macOS universal, and Windows amd64 archives, generates SHA-256 checksums, and
+publishes them to a GitHub Release.
+
+CI verifies that the application metadata uses one consistent semantic version and that the
+changelog contains its matching release section. The tag workflow assumes the tag is created from a
+green commit already merged to `main`, so it only builds, packages, checksums, and publishes. The
+current macOS app is ad-hoc signed and the Windows binary is unsigned. Platform signing and
+notarisation steps still need to be added, along with their secrets, before either build will be
+trusted automatically by the operating system.
+
 ## CLI examples
 
 ```sh
 # Inspect the Pi and its boot/root disk layout
-malina inspect --host pi@raspberrypi.local
+malina inspect --host user@host
 
 # Or prompt securely for an SSH password
-malina inspect --host pi@raspberrypi.local --password
+malina inspect --host user@host --password
 
 # Create a live raw-image backup
 malina backup \
-  --host pi@raspberrypi.local \
+  --host user@host \
   --identity ~/.ssh/id_ed25519 \
   --output "$HOME/Malina Backups"
 

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -50,67 +52,186 @@ func (m *DeviceManager) run(ctx context.Context, name string, args ...string) (C
 	return runner.Run(ctx, name, args, nil)
 }
 
-type linuxDevicesPayload struct {
-	BlockDevices []linuxDevice `json:"blockdevices"`
+type linuxMount struct {
+	DeviceNumber string
+	Mountpoint   string
 }
 
-type linuxDevice struct {
-	Name        string        `json:"name"`
-	Path        string        `json:"path"`
-	Size        json.Number   `json:"size"`
-	Model       string        `json:"model"`
-	Transport   string        `json:"tran"`
-	Removable   any           `json:"rm"`
-	Type        string        `json:"type"`
-	Mountpoints []string      `json:"mountpoints"`
-	Children    []linuxDevice `json:"children"`
+func decodeMountInfoPath(value string) string {
+	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	return replacer.Replace(value)
 }
 
-func linuxRemovable(value any) bool {
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case float64:
-		return typed == 1
-	case json.Number:
-		return typed.String() == "1"
-	case string:
-		return typed == "1" || typed == "true"
-	default:
-		return false
+func parseLinuxMountInfo(contents string) []linuxMount {
+	mounts := make([]linuxMount, 0)
+	for _, line := range strings.Split(contents, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		mounts = append(mounts, linuxMount{DeviceNumber: fields[2], Mountpoint: decodeMountInfoPath(fields[4])})
 	}
+	return mounts
 }
 
-func parseLinuxDevices(output string, excluded map[string]bool) ([]Device, error) {
-	decoder := json.NewDecoder(strings.NewReader(output))
-	decoder.UseNumber()
-	var payload linuxDevicesPayload
-	if err := decoder.Decode(&payload); err != nil {
-		return nil, WrapError("DEVICE_LIST_FAILED", "Cannot parse lsblk output: "+err.Error(), err)
+func linuxBackingDiskNames(sysRoot, deviceNumber string) ([]string, error) {
+	start, err := filepath.EvalSymlinks(filepath.Join(sysRoot, "dev", "block", deviceNumber))
+	if err != nil {
+		return nil, err
+	}
+	disks := map[string]bool{}
+	visiting := map[string]bool{}
+	var visit func(string) error
+	visit = func(path string) error {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return err
+		}
+		if visiting[resolved] {
+			return fmt.Errorf("cycle in sysfs block-device graph at %s", resolved)
+		}
+		visiting[resolved] = true
+		defer delete(visiting, resolved)
+
+		if _, err := os.Stat(filepath.Join(resolved, "partition")); err == nil {
+			return visit(filepath.Dir(resolved))
+		}
+		entries, err := os.ReadDir(filepath.Join(resolved, "slaves"))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if len(entries) > 0 {
+			for _, entry := range entries {
+				if err := visit(filepath.Join(resolved, "slaves", entry.Name())); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		disks[filepath.Base(resolved)] = true
+		return nil
+	}
+	if err := visit(start); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(disks))
+	for name := range disks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func readTrimmed(path string) string {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(contents))
+}
+
+func linuxBlockTransport(sysRoot, name string) string {
+	if strings.HasPrefix(name, "mmcblk") {
+		return "mmc"
+	}
+	if strings.HasPrefix(name, "nvme") {
+		return "nvme"
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(sysRoot, "class", "block", name))
+	if err == nil {
+		slashed := filepath.ToSlash(resolved)
+		if strings.Contains(slashed, "/usb") {
+			return "usb"
+		}
+		if strings.Contains(slashed, "/mmc") {
+			return "mmc"
+		}
+	}
+	return "removable"
+}
+
+func listLinuxDevices(mountInfoPath, sysRoot string) ([]Device, error) {
+	contents, err := os.ReadFile(mountInfoPath)
+	if err != nil {
+		return nil, WrapError("DEVICE_LIST_FAILED", "Cannot read Linux mount information: "+err.Error(), err)
+	}
+	mounts := parseLinuxMountInfo(string(contents))
+	excluded := map[string]bool{}
+	rootFound := false
+	for _, mount := range mounts {
+		if mount.Mountpoint != "/" {
+			continue
+		}
+		rootFound = true
+		names, err := linuxBackingDiskNames(sysRoot, mount.DeviceNumber)
+		if err != nil {
+			return nil, WrapError("DEVICE_LIST_FAILED", "Cannot resolve the Linux system disk: "+err.Error(), err)
+		}
+		for _, name := range names {
+			excluded[name] = true
+		}
+	}
+	if !rootFound || len(excluded) == 0 {
+		return nil, NewError("DEVICE_LIST_FAILED", "Cannot identify the Linux system disk safely.")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(sysRoot, "class", "block"))
+	if err != nil {
+		return nil, WrapError("DEVICE_LIST_FAILED", "Cannot enumerate Linux block devices: "+err.Error(), err)
 	}
 	devices := make([]Device, 0)
-	for _, disk := range payload.BlockDevices {
-		if disk.Type != "disk" || excluded[disk.Path] {
+	for _, entry := range entries {
+		name := entry.Name()
+		base := filepath.Join(sysRoot, "class", "block", name)
+		if excluded[name] || readTrimmed(filepath.Join(base, "partition")) != "" {
 			continue
 		}
-		if !linuxRemovable(disk.Removable) && disk.Transport != "usb" && disk.Transport != "mmc" {
+		path := "/dev/" + name
+		if assertSafeDevicePath(path) != nil {
 			continue
 		}
-		bytes, err := strconv.ParseInt(disk.Size.String(), 10, 64)
-		if err != nil || bytes <= 0 {
+		sectors, err := strconv.ParseInt(readTrimmed(filepath.Join(base, "size")), 10, 64)
+		if err != nil || sectors <= 0 || sectors > (1<<63-1)/512 {
 			continue
 		}
-		name := strings.TrimSpace(disk.Model)
-		if name == "" {
-			name = disk.Name
+		transport := linuxBlockTransport(sysRoot, name)
+		removable := readTrimmed(filepath.Join(base, "removable")) == "1"
+		if !removable && transport != "usb" && transport != "mmc" {
+			continue
 		}
-		transport := disk.Transport
-		if transport == "" {
-			transport = "removable"
+		model := readTrimmed(filepath.Join(base, "device", "model"))
+		if model == "" {
+			model = name
 		}
-		devices = append(devices, Device{ID: disk.Path, Path: disk.Path, Name: name, Bytes: bytes, Transport: transport, Removable: true})
+		devices = append(devices, Device{
+			ID: path, Path: path, Name: model, Bytes: sectors * 512, Transport: transport, Removable: true,
+		})
 	}
+	sort.Slice(devices, func(i, j int) bool { return devices[i].Path < devices[j].Path })
 	return devices, nil
+}
+
+func linuxMountpointsForDisk(mountInfoPath, sysRoot, diskName string) ([]string, error) {
+	contents, err := os.ReadFile(mountInfoPath)
+	if err != nil {
+		return nil, err
+	}
+	mountpoints := make([]string, 0)
+	seen := map[string]bool{}
+	for _, mount := range parseLinuxMountInfo(string(contents)) {
+		names, err := linuxBackingDiskNames(sysRoot, mount.DeviceNumber)
+		if err != nil {
+			continue
+		}
+		for _, name := range names {
+			if name == diskName && !seen[mount.Mountpoint] {
+				seen[mount.Mountpoint] = true
+				mountpoints = append(mountpoints, mount.Mountpoint)
+			}
+		}
+	}
+	sort.Slice(mountpoints, func(i, j int) bool { return len(mountpoints[i]) > len(mountpoints[j]) })
+	return mountpoints, nil
 }
 
 type windowsDisk struct {
@@ -191,24 +312,7 @@ func (m *DeviceManager) List(ctx context.Context) ([]Device, error) {
 	var err error
 	switch m.GOOS {
 	case "linux":
-		root, runErr := m.run(ctx, "findmnt", "-n", "-o", "SOURCE", "--target", "/")
-		if runErr != nil {
-			return nil, runErr
-		}
-		ancestors, runErr := m.run(ctx, "lsblk", "--inverse", "--noheadings", "--output", "PATH", strings.TrimSpace(root.Stdout))
-		if runErr != nil {
-			return nil, runErr
-		}
-		lines := strings.Fields(ancestors.Stdout)
-		excluded := map[string]bool{}
-		if len(lines) > 0 {
-			excluded[lines[len(lines)-1]] = true
-		}
-		listing, runErr := m.run(ctx, "lsblk", "--json", "--bytes", "--nodeps", "--output", "NAME,PATH,SIZE,MODEL,TRAN,RM,TYPE")
-		if runErr != nil {
-			return nil, runErr
-		}
-		devices, err = parseLinuxDevices(listing.Stdout, excluded)
+		devices, err = listLinuxDevices("/proc/self/mountinfo", "/sys")
 	case "darwin":
 		listing, runErr := m.run(ctx, "diskutil", "list", "external", "physical")
 		if runErr != nil {
@@ -251,34 +355,16 @@ func (m *DeviceManager) List(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
-func collectMountpoints(devices []linuxDevice, output *[]string) {
-	for _, device := range devices {
-		for _, mountpoint := range device.Mountpoints {
-			if mountpoint != "" {
-				*output = append(*output, mountpoint)
-			}
-		}
-		collectMountpoints(device.Children, output)
-	}
-}
-
 func (m *DeviceManager) Unmount(ctx context.Context, device string) error {
 	if err := assertSafeDevicePath(device); err != nil {
 		return err
 	}
 	switch m.GOOS {
 	case "linux":
-		listing, err := m.run(ctx, "lsblk", "--json", "--output", "PATH,MOUNTPOINTS", device)
+		mountpoints, err := linuxMountpointsForDisk("/proc/self/mountinfo", "/sys", strings.TrimPrefix(device, "/dev/"))
 		if err != nil {
-			return err
+			return WrapError("DEVICE_UNMOUNT_FAILED", "Cannot inspect mounted filesystems: "+err.Error(), err)
 		}
-		var payload linuxDevicesPayload
-		if err := json.Unmarshal([]byte(listing.Stdout), &payload); err != nil {
-			return WrapError("DEVICE_UNMOUNT_FAILED", "Cannot parse mount information: "+err.Error(), err)
-		}
-		mountpoints := []string{}
-		collectMountpoints(payload.BlockDevices, &mountpoints)
-		sort.Slice(mountpoints, func(i, j int) bool { return len(mountpoints[i]) > len(mountpoints[j]) })
 		for _, mountpoint := range mountpoints {
 			if _, err := m.run(ctx, "umount", mountpoint); err != nil {
 				if _, sudoErr := m.run(ctx, "sudo", "-n", "umount", mountpoint); sudoErr != nil {

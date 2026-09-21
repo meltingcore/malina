@@ -12,8 +12,8 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "Live whole-device backup and restore for Raspberry Pi"
 vendor: "meltingcore"
-homepage: "https://wails.io"
-license: "MIT"
+homepage: "https://github.com/meltingcore/malina"
+license: "MPL-2.0"
 release: "1"
 
 contents:
