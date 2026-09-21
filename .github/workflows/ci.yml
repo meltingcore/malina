@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^  version: "\([^"]*\)"/\1/p' build/config.yml)"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "build/config.yml must contain a stable semantic version; found '${version}'." >&2
+            exit 1
+          fi
+          grep -Fq "\"version\": \"${version}\"" frontend/package.json
+          grep -Fq "<span class=\"version-badge\">v${version}</span>" frontend/index.html
+          grep -Fq "version: \"${version}\"" build/linux/nfpm/nfpm.yaml
+          grep -Fq "<string>${version}</string>" build/darwin/Info.plist
+          grep -Fq "\"file_version\": \"${version}\"" build/windows/info.json
+          grep -Fq "## [${version}] - " CHANGELOG.md
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Check frontend types
+        run: pnpm --dir frontend check
+
+      - name: Build frontend
+        run: pnpm --dir frontend build
