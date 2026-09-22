@@ -4,11 +4,19 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/meltingcore/malina/internal/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// isDialogCancelled identifies the cancellation error returned by Wails' Windows
+// file-dialog implementation. Wails does not expose that sentinel publicly, so
+// callers must distinguish its stable error text from actual dialog failures.
+func isDialogCancelled(err error) bool {
+	return err != nil && strings.EqualFold(strings.TrimSpace(err.Error()), "cancelled by user")
+}
 
 type Service struct {
 	app            *application.App
@@ -53,6 +61,9 @@ func (s *Service) SelectIdentityFile(_ context.Context, currentPath string) (str
 		dialog.SetDirectory(filepath.Dir(currentPath))
 	}
 	path, err := dialog.PromptForSingleSelection()
+	if isDialogCancelled(err) {
+		return "", nil
+	}
 	if err != nil {
 		return "", core.WrapError("DIALOG_FAILED", "Could not open the key file picker.", err)
 	}
@@ -69,6 +80,9 @@ func (s *Service) SelectBackupDirectory(_ context.Context, currentPath string) (
 		dialog.SetDirectory(currentPath)
 	}
 	path, err := dialog.PromptForSingleSelection()
+	if isDialogCancelled(err) {
+		return "", nil
+	}
 	if err != nil {
 		return "", core.WrapError("DIALOG_FAILED", "Could not open the folder picker.", err)
 	}
@@ -81,6 +95,9 @@ func (s *Service) SelectBackup(_ context.Context) (core.Backup, error) {
 		CanChooseDirectories(true).
 		CanChooseFiles(false).
 		PromptForSingleSelection()
+	if isDialogCancelled(err) {
+		return core.Backup{}, nil
+	}
 	if err != nil {
 		return core.Backup{}, core.WrapError("DIALOG_FAILED", "Could not open the backup picker.", err)
 	}

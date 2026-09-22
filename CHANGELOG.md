@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.2]
+
+### Fixes
+
+- Treat cancellation of a Windows native file or folder picker as a normal empty selection instead
+  of reporting a failed operation.
+- Prevent Windows console windows from flashing while Malina runs subprocesses, including
+  PowerShell removable-device discovery.
+
 ## [0.1.1]
 
 ### Fixes

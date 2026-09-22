@@ -24,6 +24,7 @@ type ExecRunner struct{}
 
 func (ExecRunner) Run(ctx context.Context, name string, args []string, input io.Reader) (CommandResult, error) {
 	command := exec.CommandContext(ctx, name, args...)
+	configureProcess(command)
 	command.Stdin = input
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
