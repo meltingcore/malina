@@ -57,14 +57,8 @@ fetch("https://api.github.com/repos/meltingcore/malina/releases?per_page=10", { 
       if (link && assets[platform]) {
         link.href = assets[platform].browser_download_url;
         link.setAttribute("download", "");
-        link.innerHTML = `Download ${version} <span>↓</span>`;
+        link.innerHTML = "Download <span>↓</span>";
       }
-    }
-    const primary = document.querySelector("[data-primary-download]");
-    if (primary && currentPlatform && assets[currentPlatform]) {
-      primary.href = assets[currentPlatform].browser_download_url;
-      primary.setAttribute("download", "");
-      primary.textContent = `Download for ${currentPlatform === "macos" ? "macOS" : currentPlatform[0].toUpperCase() + currentPlatform.slice(1)}`;
     }
   })
   .catch(() => {});
