@@ -10,6 +10,9 @@ The screenshots under `assets/screenshots/` are captured from Malina's real Wail
 download links query the public GitHub Releases API and match the archives produced by the release
 workflow. They fall back to the releases page if the API or release assets are unavailable.
 
+The operating-system icons under `assets/os-*.svg` are from
+[Devicon](https://github.com/devicons/devicon), licensed under the MIT License.
+
 ## Cloudflare Pages setup
 
 `.github/workflows/deploy-website.yml` deploys this directory whenever a change under `website/`
