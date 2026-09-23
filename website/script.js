@@ -27,6 +27,51 @@ document.querySelectorAll("[data-screen]").forEach((tab) => {
   });
 });
 
+const copyCommand = async (text) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable");
+};
+
+document.querySelectorAll(".copy-command").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const block = button.closest(".command-block");
+    const status = block?.querySelector(".copy-status");
+    const command = block?.querySelector("code")?.textContent?.trim();
+    if (!command) return;
+
+    button.disabled = true;
+    try {
+      await copyCommand(command);
+      button.textContent = "Copied";
+      button.classList.add("copied");
+      status.textContent = "Command copied to clipboard.";
+    } catch {
+      button.textContent = "Try again";
+      button.classList.add("failed");
+      status.textContent = "Could not copy the command. Please select and copy it manually.";
+    }
+
+    window.setTimeout(() => {
+      button.textContent = "Copy";
+      button.classList.remove("copied", "failed");
+      button.disabled = false;
+    }, 1800);
+  });
+});
+
 const matchers = {
   macos: /macos-universal\.zip$/i,
   windows: /windows-amd64\.zip$/i,
