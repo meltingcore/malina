@@ -186,8 +186,12 @@ jobs:
           PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
           PACKAGE_ARCH: ${{ matrix.arch }}
         run: |
-          mkdir -p "stage/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}" dist
-          cp bin/malina bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}/"
+          package_dir="stage/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}"
+          mkdir -p "${package_dir}/bin" "${package_dir}/share/applications" "${package_dir}/share/icons/hicolor/512x512/apps" "${package_dir}/share/doc/malina" dist
+          cp bin/malina bin/malina-cli "${package_dir}/bin/"
+          cp build/linux/desktop "${package_dir}/share/applications/malina.desktop"
+          cp build/appicon.png "${package_dir}/share/icons/hicolor/512x512/apps/malina.png"
+          cp LICENSE README.md CHANGELOG.md "${package_dir}/share/doc/malina/"
           tar -C stage -czf "dist/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}.tar.gz" "malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}"
 
       - name: Upload Linux release artifact

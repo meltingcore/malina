@@ -73,6 +73,8 @@ func (m *DeviceManager) run(ctx context.Context, name string, args ...string) (C
 type linuxMount struct {
 	DeviceNumber string
 	Mountpoint   string
+	Filesystem   string
+	Source       string
 }
 
 func decodeMountInfoPath(value string) string {
@@ -87,7 +89,15 @@ func parseLinuxMountInfo(contents string) []linuxMount {
 		if len(fields) < 6 {
 			continue
 		}
-		mounts = append(mounts, linuxMount{DeviceNumber: fields[2], Mountpoint: decodeMountInfoPath(fields[4])})
+		mount := linuxMount{DeviceNumber: fields[2], Mountpoint: decodeMountInfoPath(fields[4])}
+		for i := 6; i+2 < len(fields); i++ {
+			if fields[i] == "-" {
+				mount.Filesystem = fields[i+1]
+				mount.Source = decodeMountInfoPath(fields[i+2])
+				break
+			}
+		}
+		mounts = append(mounts, mount)
 	}
 	return mounts
 }
@@ -97,6 +107,10 @@ func linuxBackingDiskNames(sysRoot, deviceNumber string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return linuxBackingDiskNamesFromPath(start)
+}
+
+func linuxBackingDiskNamesFromPath(start string) ([]string, error) {
 	disks := map[string]bool{}
 	visiting := map[string]bool{}
 	var visit func(string) error
@@ -140,6 +154,78 @@ func linuxBackingDiskNames(sysRoot, deviceNumber string) ([]string, error) {
 	return names, nil
 }
 
+func linuxBackingDiskNamesForMount(sysRoot, devRoot string, mount linuxMount) ([]string, error) {
+	names, err := linuxBackingDiskNames(sysRoot, mount.DeviceNumber)
+	if err == nil {
+		return names, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	sourceName := mount.Source
+	if bracket := strings.LastIndex(sourceName, "["); bracket > 0 && strings.HasSuffix(sourceName, "]") {
+		sourceName = sourceName[:bracket]
+	}
+	if !strings.HasPrefix(sourceName, "/dev/") {
+		return nil, err
+	}
+	source, sourceErr := filepath.EvalSymlinks(filepath.Join(devRoot, strings.TrimPrefix(sourceName, "/dev/")))
+	if sourceErr != nil {
+		return nil, sourceErr
+	}
+	sourceSysfs, sourceErr := filepath.EvalSymlinks(filepath.Join(sysRoot, "class", "block", filepath.Base(source)))
+	if sourceErr != nil {
+		return nil, sourceErr
+	}
+	if mount.Filesystem != "btrfs" {
+		return linuxBackingDiskNamesFromPath(sourceSysfs)
+	}
+
+	filesystems, sourceErr := os.ReadDir(filepath.Join(sysRoot, "fs", "btrfs"))
+	if sourceErr != nil {
+		return nil, sourceErr
+	}
+	for _, filesystem := range filesystems {
+		devicesDir := filepath.Join(sysRoot, "fs", "btrfs", filesystem.Name(), "devices")
+		devices, readErr := os.ReadDir(devicesDir)
+		if readErr != nil {
+			continue
+		}
+		foundSource := false
+		paths := make([]string, 0, len(devices))
+		for _, device := range devices {
+			path, resolveErr := filepath.EvalSymlinks(filepath.Join(devicesDir, device.Name()))
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			if path == sourceSysfs {
+				foundSource = true
+			}
+			paths = append(paths, path)
+		}
+		if !foundSource {
+			continue
+		}
+		all := map[string]bool{}
+		for _, path := range paths {
+			backing, resolveErr := linuxBackingDiskNamesFromPath(path)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			for _, name := range backing {
+				all[name] = true
+			}
+		}
+		names := make([]string, 0, len(all))
+		for name := range all {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names, nil
+	}
+	return nil, fmt.Errorf("cannot identify all backing devices for the Btrfs root filesystem")
+}
+
 func readTrimmed(path string) string {
 	contents, err := os.ReadFile(path)
 	if err != nil {
@@ -168,7 +254,7 @@ func linuxBlockTransport(sysRoot, name string) string {
 	return "removable"
 }
 
-func listLinuxDevices(mountInfoPath, sysRoot string) ([]Device, error) {
+func listLinuxDevices(mountInfoPath, sysRoot, devRoot string) ([]Device, error) {
 	contents, err := os.ReadFile(mountInfoPath)
 	if err != nil {
 		return nil, WrapError("DEVICE_LIST_FAILED", "Cannot read Linux mount information: "+err.Error(), err)
@@ -181,7 +267,7 @@ func listLinuxDevices(mountInfoPath, sysRoot string) ([]Device, error) {
 			continue
 		}
 		rootFound = true
-		names, err := linuxBackingDiskNames(sysRoot, mount.DeviceNumber)
+		names, err := linuxBackingDiskNamesForMount(sysRoot, devRoot, mount)
 		if err != nil {
 			return nil, WrapError("DEVICE_LIST_FAILED", "Cannot resolve the Linux system disk: "+err.Error(), err)
 		}
@@ -357,7 +443,7 @@ func (m *DeviceManager) List(ctx context.Context) ([]Device, error) {
 	var err error
 	switch m.GOOS {
 	case "linux":
-		devices, err = listLinuxDevices("/proc/self/mountinfo", "/sys")
+		devices, err = listLinuxDevices("/proc/self/mountinfo", "/sys", "/dev")
 	case "darwin":
 		listing, runErr := m.run(ctx, "diskutil", "list", "external", "physical")
 		if runErr != nil {

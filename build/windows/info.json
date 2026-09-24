@@ -1,12 +1,12 @@
 {
 	"fixed": {
-		"file_version": "0.1.2"
+		"file_version": "0.1.3"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.1.2",
-			"CompanyName": "meltingcore",
-			"FileDescription": "Live whole-device backup and restore for Raspberry Pi",
+			"ProductVersion": "0.1.3",
+			"CompanyName": "Melting Core",
+			"FileDescription": "Easy backup and restore for Raspberry Pi",
 			"LegalCopyright": "Copyright 2026 Melting Core",
 			"ProductName": "Malina",
 			"Comments": "Malina"

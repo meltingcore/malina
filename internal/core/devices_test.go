@@ -59,7 +59,7 @@ func TestSafeDevicePathsRejectPartitionsAndArguments(t *testing.T) {
 
 func TestParseLinuxMountInfo(t *testing.T) {
 	mounts := parseLinuxMountInfo("36 25 8:2 / / rw - ext4 /dev/sda2 rw\n40 36 8:1 / /boot\\040files rw - vfat /dev/sda1 rw\n")
-	if len(mounts) != 2 || mounts[0].DeviceNumber != "8:2" || mounts[1].Mountpoint != "/boot files" {
+	if len(mounts) != 2 || mounts[0].DeviceNumber != "8:2" || mounts[0].Filesystem != "ext4" || mounts[0].Source != "/dev/sda2" || mounts[1].Mountpoint != "/boot files" {
 		t.Fatalf("unexpected mounts: %#v", mounts)
 	}
 }
@@ -107,12 +107,83 @@ func TestListLinuxDevicesUsesProcAndSysfs(t *testing.T) {
 		}
 	}
 
-	devices, err := listLinuxDevices(mountInfo, sysRoot)
+	devices, err := listLinuxDevices(mountInfo, sysRoot, filepath.Join(temporary, "dev"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(devices) != 1 || devices[0].Path != "/dev/sda" || devices[0].Bytes != 4000*512 || devices[0].Transport != "usb" {
 		t.Fatalf("unexpected devices: %#v", devices)
+	}
+}
+
+func TestListLinuxDevicesResolvesVirtualBtrfsRootAndExcludesAllBackingDisks(t *testing.T) {
+	temporary := t.TempDir()
+	sysRoot := filepath.Join(temporary, "sys")
+	devRoot := filepath.Join(temporary, "dev")
+	mountInfo := filepath.Join(temporary, "mountinfo")
+	internalDisk := filepath.Join(sysRoot, "devices", "pci", "nvme0n1")
+	internalPartition := filepath.Join(internalDisk, "nvme0n1p2")
+	secondDisk := filepath.Join(sysRoot, "devices", "pci", "usb1", "block", "sda")
+	secondPartition := filepath.Join(secondDisk, "sda2")
+	restoreDisk := filepath.Join(sysRoot, "devices", "pci", "usb2", "block", "sdb")
+	btrfsDevices := filepath.Join(sysRoot, "fs", "btrfs", "root-uuid", "devices")
+	for _, directory := range []string{
+		filepath.Join(sysRoot, "class", "block"), internalPartition, secondPartition,
+		filepath.Join(restoreDisk, "device"), btrfsDevices, devRoot,
+	} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, partition := range []string{internalPartition, secondPartition} {
+		if err := os.WriteFile(filepath.Join(partition, "partition"), []byte("2\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, disk := range []string{internalDisk, secondDisk, restoreDisk} {
+		if err := os.WriteFile(filepath.Join(disk, "size"), []byte("4000\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(disk, "removable"), []byte("1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(mountInfo, []byte("36 25 0:37 /root / rw - btrfs /dev/nvme0n1p2[/root] rw\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devRoot, "nvme0n1p2"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for link, target := range map[string]string{
+		filepath.Join(sysRoot, "class", "block", "nvme0n1p2"): internalPartition,
+		filepath.Join(sysRoot, "class", "block", "nvme0n1"):   internalDisk,
+		filepath.Join(sysRoot, "class", "block", "sda"):       secondDisk,
+		filepath.Join(sysRoot, "class", "block", "sdb"):       restoreDisk,
+		filepath.Join(btrfsDevices, "nvme0n1p2"):              internalPartition,
+		filepath.Join(btrfsDevices, "sda2"):                   secondPartition,
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	devices, err := listLinuxDevices(mountInfo, sysRoot, devRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 1 || devices[0].Path != "/dev/sdb" {
+		t.Fatalf("expected only the separate restore device, got %#v", devices)
+	}
+}
+
+func TestListLinuxDevicesRejectsUnresolvedVirtualRoot(t *testing.T) {
+	temporary := t.TempDir()
+	mountInfo := filepath.Join(temporary, "mountinfo")
+	if err := os.WriteFile(mountInfo, []byte("36 25 0:37 / / rw - overlay overlay rw\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := listLinuxDevices(mountInfo, filepath.Join(temporary, "sys"), filepath.Join(temporary, "dev")); err == nil {
+		t.Fatal("must not offer restore devices when the root disk cannot be identified")
 	}
 }
 

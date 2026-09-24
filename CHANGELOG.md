@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3]
+
+### Fixes
+
+- Add desktop entry and icon in the Linux packages and also compile for arm64.
+- Now successfully handles btrfs roots when exploring what to ignore as restore targets.
+
 ## [0.1.2]
 
 ### Fixes

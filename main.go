@@ -19,7 +19,7 @@ func init() {
 func main() {
 	app := application.New(application.Options{
 		Name:        "Malina",
-		Description: "Live whole-device backup and restore for Raspberry Pi",
+		Description: "Easy backup and restore for Raspberry Pi",
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},

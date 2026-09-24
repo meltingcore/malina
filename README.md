@@ -65,6 +65,16 @@ Install the desktop app and the `malina` command-line tool from the official Hom
 brew install --cask meltingcore/tap/malina
 ```
 
+## Install on Linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/meltingcore/malina/main/scripts/install-linux.sh | sh
+```
+
+Linux release archives contain a ready-to-install `bin/` and `share/` tree. The installer copies
+that tree into `/usr/local`, including the desktop entry and icon. Malina then appears in
+application launchers such as GNOME search and KDE Plasma's application menu.
+
 ## Develop and build
 
 ```sh

@@ -8,16 +8,16 @@
     !define INFO_PROJECTNAME "Malina"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "meltingcore"
+    !define INFO_COMPANYNAME "Melting Core"
 !endif
 !ifndef INFO_PRODUCTNAME
     !define INFO_PRODUCTNAME "Malina"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.1.2"
+    !define INFO_PRODUCTVERSION "0.1.3"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "Copyright 2026 meltingcore"
+    !define INFO_COPYRIGHT "Copyright 2026 Melting Core"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

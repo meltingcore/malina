@@ -10,13 +10,13 @@
   <Identity 
     Name="com.meltingcore.malina"
     Publisher="CN=meltingcore"
-    Version="0.1.2.0"
+    Version="0.1.3.0"
     ProcessorArchitecture="x64" />
   
   <Properties>
     <DisplayName>Malina</DisplayName>
-    <PublisherDisplayName>meltingcore</PublisherDisplayName>
-    <Description>Live whole-device backup and restore for Raspberry Pi</Description>
+    <PublisherDisplayName>Melting Core</PublisherDisplayName>
+    <Description>Easy backup and restore for Raspberry Pi</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   
@@ -32,7 +32,7 @@
     <Application Id="com.meltingcore.malina" Executable="malina" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Malina"
-        Description="Live whole-device backup and restore for Raspberry Pi"
+        Description="Easy backup and restore for Raspberry Pi"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
