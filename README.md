@@ -98,6 +98,8 @@ Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Pull requests and updates 
 Go and frontend checks automatically. Running the Release workflow for a stable version such as
 `v0.1.0` builds Linux amd64 and arm64, macOS universal, and Windows amd64 archives, generates
 SHA-256 checksums, and publishes them to a GitHub Release.
+On later runs for the same version, the workflow builds only archives missing from that release,
+keeps existing archives, and updates the checksums for the complete set.
 
 CI verifies that the application metadata uses one consistent semantic version and that the
 changelog contains its matching release section. The release workflow assumes the tag is created from a

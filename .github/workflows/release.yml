@@ -24,6 +24,12 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      linux_matrix: ${{ steps.assets.outputs.linux_matrix }}
+      build_linux: ${{ steps.assets.outputs.build_linux }}
+      build_macos: ${{ steps.assets.outputs.build_macos }}
+      build_windows: ${{ steps.assets.outputs.build_windows }}
+      build_any: ${{ steps.assets.outputs.build_any }}
+      release_exists: ${{ steps.assets.outputs.release_exists }}
 
     steps:
       - name: Check out repository
@@ -52,9 +58,33 @@ jobs:
           echo "version=${changelog_version}" >> "${GITHUB_OUTPUT}"
           echo "tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
+      - name: Select missing release archives
+        id: assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --retry 3 --output release.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          case "${status}" in
+            200) echo 'release_exists=true' >> "${GITHUB_OUTPUT}" ;;
+            404)
+              printf '{"assets":[]}' > release.json
+              echo 'release_exists=false' >> "${GITHUB_OUTPUT}"
+              ;;
+            *) echo "::error::GitHub release lookup failed with HTTP ${status}."; exit 1 ;;
+          esac
+          python3 scripts/release_plan.py "${PACKAGE_VERSION}" release.json
+
   quality:
     name: Verify release candidate
     needs: metadata
+    if: needs.metadata.outputs.build_any == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
@@ -107,15 +137,11 @@ jobs:
   linux:
     name: Build Linux ${{ matrix.arch }}
     needs: [metadata, quality]
+    if: needs.metadata.outputs.build_linux == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+      matrix: ${{ fromJSON(needs.metadata.outputs.linux_matrix) }}
 
     steps:
       - name: Check out repository
@@ -176,6 +202,7 @@ jobs:
   macos:
     name: Build macOS universal
     needs: [metadata, quality]
+    if: needs.metadata.outputs.build_macos == 'true'
     runs-on: macos-14
     timeout-minutes: 35
 
@@ -235,6 +262,7 @@ jobs:
   windows:
     name: Build Windows amd64
     needs: [metadata, quality]
+    if: needs.metadata.outputs.build_windows == 'true'
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -299,9 +327,20 @@ jobs:
     name: Publish GitHub Release
     needs:
       - metadata
+      - quality
       - linux
       - macos
       - windows
+    if: >-
+      ${{
+        always() &&
+        needs.metadata.result == 'success' &&
+        needs.quality.result == 'success' &&
+        needs.metadata.outputs.build_any == 'true' &&
+        (needs.linux.result == 'success' || needs.linux.result == 'skipped') &&
+        (needs.macos.result == 'success' || needs.macos.result == 'skipped') &&
+        (needs.windows.result == 'success' || needs.windows.result == 'skipped')
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -318,6 +357,31 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Record newly built archives
+        shell: bash
+        run: |
+          find dist -maxdepth 1 -type f -name 'malina-*' -print | sort > new-archives.txt
+          test -s new-archives.txt
+
+      - name: Restore existing release archives
+        if: needs.metadata.outputs.release_exists == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          for archive in \
+            "malina-${PACKAGE_VERSION}-linux-amd64.tar.gz" \
+            "malina-${PACKAGE_VERSION}-linux-arm64.tar.gz" \
+            "malina-${PACKAGE_VERSION}-macos-universal.zip" \
+            "malina-${PACKAGE_VERSION}-windows-amd64.zip"; do
+            if [[ ! -f "dist/${archive}" ]]; then
+              gh release download "${RELEASE_TAG}" --pattern "${archive}" --dir dist
+            fi
+          done
+
       - name: Create checksums and release notes
         shell: bash
         env:
@@ -325,7 +389,11 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum ./* > SHA256SUMS
+          sha256sum \
+            "malina-${PACKAGE_VERSION}-linux-amd64.tar.gz" \
+            "malina-${PACKAGE_VERSION}-linux-arm64.tar.gz" \
+            "malina-${PACKAGE_VERSION}-macos-universal.zip" \
+            "malina-${PACKAGE_VERSION}-windows-amd64.zip" > SHA256SUMS
           cd ..
           awk -v version="${PACKAGE_VERSION}" '
             $0 == "## [" version "]" || index($0, "## [" version "] - ") == 1 { found = 1; next }
@@ -339,13 +407,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+          RELEASE_EXISTS: ${{ needs.metadata.outputs.release_exists }}
         run: |
           set -euo pipefail
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" dist/* --clobber
+          if [[ "${RELEASE_EXISTS}" == "true" ]]; then
+            mapfile -t new_archives < new-archives.txt
             gh release edit "${RELEASE_TAG}" \
               --title "${RELEASE_TAG}" \
               --notes-file release-notes.md
+            gh release upload "${RELEASE_TAG}" dist/SHA256SUMS --clobber
+            gh release upload "${RELEASE_TAG}" "${new_archives[@]}"
           else
             gh release create "${RELEASE_TAG}" dist/* \
               --title "${RELEASE_TAG}" \
