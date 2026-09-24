@@ -45,7 +45,7 @@
             <a class="button primary" href="#download">Install Malina</a>
             <a class="button secondary" href="https://github.com/meltingcore/malina">View on GitHub <span aria-hidden="true">↗</span></a>
           </div>
-          <div class="platforms" aria-label="Supported platforms"><span>macOS universal</span><i></i><span>Windows x64</span><i></i><span>Linux amd64</span><i></i><span>GUI + CLI</span></div>
+          <div class="platforms" aria-label="Supported platforms"><span>macOS universal</span><i></i><span>Windows x64</span><i></i><span>Linux x64 + ARM64</span><i></i><span>GUI + CLI</span></div>
         </div>
         <div class="hero-product">
           <div class="product-glow"></div>
@@ -141,9 +141,8 @@
 
       <section id="download" class="section shell download">
         <div class="section-heading centered">
-          <span class="eyebrow">Install · Preview release</span>
+          <span class="eyebrow">Install</span>
           <h2>Desktop app and CLI.</h2>
-          <p>macOS is available through Homebrew. Linux and Windows releases are portable archives for x86-64 systems.</p>
         </div>
         <div class="download-grid">
           <article data-platform-card="macos">
@@ -152,10 +151,8 @@
             <a href="https://github.com/meltingcore/malina/releases" data-download="macos">Download <span>↓</span></a>
           </article>
           <article data-platform-card="linux">
-            <header><span class="os linux"><img src="assets/os-linux.svg" width="35" height="35" alt="Linux"></span><div><h3>Linux</h3><p>amd64 · GTK 4 + WebKitGTK 6.0</p></div></header>
-            <div class="install-copy"><h4>Portable tarball</h4><div class="command-block"><pre><code>tar -xzf malina-*-linux-amd64.tar.gz
-cd malina-*-linux-amd64
-./malina</code></pre><button class="copy-command" type="button" aria-label="Copy Linux install commands">Copy</button><span class="copy-status sr-only" aria-live="polite"></span></div><p>Run the CLI as <code>./malina-cli</code>, or install it with <code>sudo install -m 0755 malina-cli /usr/local/bin/malina</code>.</p></div>
+            <header><span class="os linux"><img src="assets/os-linux.svg" width="35" height="35 " alt="Linux"></span><div><h3>Linux</h3><p>x64 + ARM64 · GTK 4 + WebKitGTK 6.0</p></div></header>
+            <div class="install-copy"><h4>Quick install</h4><div class="command-block"><pre><code>curl -fsSL https://raw.githubusercontent.com/meltingcore/malina/main/scripts/install-linux.sh | sh</code></pre><button class="copy-command" type="button" aria-label="Copy Linux install command">Copy</button><span class="copy-status sr-only" aria-live="polite"></span></div><p>Detects your CPU architecture and installs the latest release and CLI to <code>/usr/local/bin</code>. </p></div>
             <a href="https://github.com/meltingcore/malina/releases" data-download="linux">Download <span>↓</span></a>
           </article>
           <article data-platform-card="windows">
@@ -166,13 +163,13 @@ cd .\malina-*-windows-amd64
             <a href="https://github.com/meltingcore/malina/releases" data-download="windows">Download <span>↓</span></a>
           </article>
         </div>
-        <div class="notice"><span>i</span><p><b>Signing status:</b> macOS builds are ad-hoc signed and Windows builds are unsigned, so the operating system may require manual confirmation. Published releases include a <a href="https://github.com/meltingcore/malina/releases">SHA256SUMS file</a>.</p></div>
+        <div class="notice"><span>i</span><p><b>Signing status:</b> macOS builds are ad-hoc signed and Windows builds are unsigned, so the operating system may block them and require manual confirmation and exclusion. </p></div>
       </section>
     </main>
 
     <footer class="site-footer shell">
       <a class="brand" href="#top"><img src="assets/mark.svg" width="28" height="28" alt=""><span>Malina</span></a>
-      <p>Whole-device backup and restore for Raspberry Pi.</p>
+      <p>Easy backup and restore for Raspberry Pi.</p>
       <nav aria-label="Footer navigation"><a href="https://github.com/meltingcore/malina">GitHub</a><a href="https://github.com/meltingcore/malina/releases">Releases</a><a href="https://github.com/meltingcore/malina/blob/main/LICENSE">License</a></nav>
       <small>© <span id="year">2026</span> Melting Core</small>
     </footer>

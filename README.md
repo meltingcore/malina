@@ -95,12 +95,12 @@ job lifecycle are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Releases
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Pull requests and updates to `main` run the
-Go and frontend checks automatically. Pushing a stable semantic-version tag such as `v0.1.0`
-builds Linux amd64, macOS universal, and Windows amd64 archives, generates SHA-256 checksums, and
-publishes them to a GitHub Release.
+Go and frontend checks automatically. Running the Release workflow for a stable version such as
+`v0.1.0` builds Linux amd64 and arm64, macOS universal, and Windows amd64 archives, generates
+SHA-256 checksums, and publishes them to a GitHub Release.
 
 CI verifies that the application metadata uses one consistent semantic version and that the
-changelog contains its matching release section. The tag workflow assumes the tag is created from a
+changelog contains its matching release section. The release workflow assumes the tag is created from a
 green commit already merged to `main`, so it only builds, packages, checksums, and publishes. The
 current macOS app is ad-hoc signed and the Windows binary is unsigned. Platform signing and
 notarisation steps still need to be added, along with their secrets, before either build will be

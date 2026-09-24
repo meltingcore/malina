@@ -75,19 +75,37 @@ document.querySelectorAll(".copy-command").forEach((button) => {
 const matchers = {
   macos: /macos-universal\.zip$/i,
   windows: /windows-amd64\.zip$/i,
-  linux: /linux-amd64\.tar\.gz$/i,
+};
+const linuxMatchers = {
+  amd64: /linux-amd64\.tar\.gz$/i,
+  arm64: /linux-arm64\.tar\.gz$/i,
 };
 
 const platformName = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent;
 const currentPlatform = /mac/i.test(platformName) ? "macos" : /win/i.test(platformName) ? "windows" : /linux|x11/i.test(platformName) ? "linux" : null;
 if (currentPlatform) document.querySelector(`[data-platform-card="${currentPlatform}"]`)?.classList.add("recommended");
 
+const linuxArchitecture = async () => {
+  if (currentPlatform !== "linux") return null;
+  try {
+    const details = await navigator.userAgentData?.getHighEntropyValues?.(["architecture", "bitness"]);
+    if (details?.architecture === "arm" && details.bitness === "64") return "arm64";
+    if (details?.architecture === "x86" && details.bitness === "64") return "amd64";
+  } catch {
+    // Fall back to architecture hints in older browser user agents.
+  }
+  const userAgent = `${navigator.platform || ""} ${navigator.userAgent || ""}`;
+  if (/\b(aarch64|arm64)\b/i.test(userAgent)) return "arm64";
+  if (/\b(x86_64|amd64|x64)\b/i.test(userAgent)) return "amd64";
+  return null;
+};
+
 fetch("https://api.github.com/repos/meltingcore/malina/releases?per_page=10", { headers: { Accept: "application/vnd.github+json" } })
   .then((response) => {
     if (!response.ok) throw new Error(String(response.status));
     return response.json();
   })
-  .then((releases) => {
+  .then(async (releases) => {
     const release = releases.find((candidate) => !candidate.draft && candidate.assets?.length);
     if (!release) return;
     const version = release.tag_name.startsWith("v") ? release.tag_name : `v${release.tag_name}`;
@@ -95,6 +113,8 @@ fetch("https://api.github.com/repos/meltingcore/malina/releases?per_page=10", { 
       label.innerHTML = `<i></i> Malina ${version} is available <b aria-hidden="true">→</b>`;
       label.href = release.html_url;
     });
+    const arch = await linuxArchitecture();
+    if (arch) matchers.linux = linuxMatchers[arch];
     const assets = {};
     for (const [platform, matcher] of Object.entries(matchers)) {
       assets[platform] = release.assets.find((asset) => matcher.test(asset.name));
@@ -102,7 +122,6 @@ fetch("https://api.github.com/repos/meltingcore/malina/releases?per_page=10", { 
       if (link && assets[platform]) {
         link.href = assets[platform].browser_download_url;
         link.setAttribute("download", "");
-        link.innerHTML = "Download <span>↓</span>";
       }
     }
   })

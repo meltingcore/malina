@@ -105,10 +105,17 @@ jobs:
           pnpm --dir frontend build
 
   linux:
-    name: Build Linux amd64
+    name: Build Linux ${{ matrix.arch }}
     needs: [metadata, quality]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Check out repository
@@ -145,21 +152,22 @@ jobs:
 
       - name: Build desktop app and CLI
         run: |
-          wails3 task linux:build ARCH=amd64 OUTPUT=bin/malina
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/malina-cli ./cmd/malina
+          wails3 task linux:build ARCH=${{ matrix.arch }} OUTPUT=bin/malina
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -ldflags="-s -w" -o bin/malina-cli ./cmd/malina
 
       - name: Package Linux release
         env:
           PACKAGE_VERSION: ${{ needs.metadata.outputs.version }}
+          PACKAGE_ARCH: ${{ matrix.arch }}
         run: |
-          mkdir -p "stage/malina-${PACKAGE_VERSION}-linux-amd64" dist
-          cp bin/malina bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${PACKAGE_VERSION}-linux-amd64/"
-          tar -C stage -czf "dist/malina-${PACKAGE_VERSION}-linux-amd64.tar.gz" "malina-${PACKAGE_VERSION}-linux-amd64"
+          mkdir -p "stage/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}" dist
+          cp bin/malina bin/malina-cli LICENSE README.md CHANGELOG.md "stage/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}/"
+          tar -C stage -czf "dist/malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}.tar.gz" "malina-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}"
 
       - name: Upload Linux release artifact
         uses: actions/upload-artifact@v7
         with:
-          name: release-linux-amd64
+          name: release-linux-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
           compression-level: 0
