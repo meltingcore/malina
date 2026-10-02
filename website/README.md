@@ -6,10 +6,11 @@ Dependency-free static product site for Malina. Preview it locally with:
 python3 -m http.server 4173 --directory website
 ```
 
-The screenshots under `assets/screenshots/` are captured from Malina's real Wails frontend. The
-download links query the public GitHub Releases API and match the archives produced by the release
-workflow, including separate Linux x64 and ARM64 archives. They fall back to the releases page if
-the API or release assets are unavailable.
+The screenshots under `assets/screenshots/` are captured from Malina 0.2.0's real Wails frontend
+with temporary demo devices and simulated backup data. The showcase covers Backup, Restore,
+Jobs, and Devices. The download links query the public GitHub Releases API and match the archives 
+produced by the release workflow, including separate Linux x64 and ARM64 archives. They fall back 
+to the releases page if the API or release assets are unavailable.
 
 The operating-system icons under `assets/os-*.svg` are from
 [Devicon](https://github.com/devicons/devicon), licensed under the MIT License.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0]
+
+### Features
+
+- Device management section added along with the ability to save configuration for multiple devices
+  in a single file. This allows for easier management of multiple Raspberry Pi devices and their
+  respective backup settings.
+
 ## [0.1.3]
 
 ### Fixes

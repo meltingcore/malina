@@ -26,12 +26,14 @@ type Service struct {
 	restoreTargets map[string]struct{}
 	jobSequence    uint64
 	appCtx         context.Context
+	profiles       *deviceStore
 }
 
 func NewService(app *application.App, engine *core.Engine) *Service {
 	return &Service{
 		app: app, engine: engine, jobs: make(map[string]*managedJob),
 		restoreTargets: make(map[string]struct{}), appCtx: context.Background(),
+		profiles: &deviceStore{credentials: systemCredentials{}},
 	}
 }
 

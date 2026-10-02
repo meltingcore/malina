@@ -9,12 +9,20 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as core$0 from "../core/models.js";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
 export function CancelJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(574686037, id);
 }
 
 export function DefaultBackupDirectory(): $CancellablePromise<string> {
     return $Call.ByID(2391739798);
+}
+
+export function DeleteSavedDevice(id: string): $CancellablePromise<$models.DeviceConfig> {
+    return $Call.ByID(288952416, id);
 }
 
 export function Inspect(connection: core$0.Connection): $CancellablePromise<core$0.PiInfo> {
@@ -33,12 +41,29 @@ export function ListJobs(): $CancellablePromise<core$0.Job[] | null> {
     return $Call.ByID(1494729520);
 }
 
+export function LoadDeviceConfig(): $CancellablePromise<$models.DeviceConfig> {
+    return $Call.ByID(1423425304);
+}
+
 export function PauseJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(552944717, id);
 }
 
 export function ResumeJob(id: string): $CancellablePromise<boolean> {
     return $Call.ByID(3427591970, id);
+}
+
+export function SaveDevice(request: $models.SaveDeviceRequest): $CancellablePromise<$models.DeviceConfig> {
+    return $Call.ByID(23139059, request);
+}
+
+/**
+ * SavedDevicePassword is only called when starting an operation, never when
+ * listing/loading profiles. Bind retrieval to the current account to prevent
+ * sending a saved password to an edited host, username, or port.
+ */
+export function SavedDevicePassword(id: string, connection: core$0.Connection): $CancellablePromise<string> {
+    return $Call.ByID(1510514020, id, connection);
 }
 
 export function SelectBackup(): $CancellablePromise<core$0.Backup> {
@@ -53,10 +78,30 @@ export function SelectIdentityFile(currentPath: string): $CancellablePromise<str
     return $Call.ByID(4266495620, currentPath);
 }
 
+export function SelectSavedDevice(id: string): $CancellablePromise<$models.DeviceConfig> {
+    return $Call.ByID(100293521, id);
+}
+
 export function StartBackup(request: core$0.BackupRequest): $CancellablePromise<core$0.Job> {
     return $Call.ByID(1788376522, request);
 }
 
+/**
+ * StartDeviceBackup freezes the submitted settings and display name. It does
+ * not consult the profile again while the background job runs.
+ */
+export function StartDeviceBackup(request: core$0.BackupRequest, profileName: string): $CancellablePromise<core$0.Job> {
+    return $Call.ByID(2017793752, request, profileName);
+}
+
 export function StartRestore(request: core$0.RestoreRequest): $CancellablePromise<core$0.Job> {
     return $Call.ByID(1353658238, request);
+}
+
+/**
+ * ValidateBackupDestination checks local resources before starting network work.
+ * Missing custom destinations are never recreated (e.g. an unplugged drive).
+ */
+export function ValidateBackupDestination(request: core$0.BackupRequest): $CancellablePromise<void> {
+    return $Call.ByID(3677852248, request);
 }

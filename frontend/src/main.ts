@@ -5,6 +5,9 @@ import * as Service from "../bindings/github.com/meltingcore/malina/internal/des
 import { fileName, formatBytes, formatClock, formatDuration, formatRate } from "./format.js";
 import { elapsedSeconds, isActiveJob, jobFraction, statusText, updateJobRuntime } from "./jobs.js";
 import type { JobFilter, JobRuntime } from "./jobs.js";
+import { createDeviceManager } from "./device-manager.js";
+import { sshHost } from "./device-profiles.js";
+import type { DeviceDraft } from "./device-profiles.js";
 import "./style.css";
 
 const element = <T extends HTMLElement>(id: string): T => {
@@ -16,6 +19,7 @@ const element = <T extends HTMLElement>(id: string): T => {
 const backupForm = element<HTMLFormElement>("backup-form");
 const restoreForm = element<HTMLFormElement>("restore-form");
 const hostInput = element<HTMLInputElement>("host");
+const usernameInput = element<HTMLInputElement>("username");
 const portInput = element<HTMLInputElement>("port");
 const passwordInput = element<HTMLInputElement>("password");
 const inspectButton = element<HTMLButtonElement>("inspect-pi");
@@ -100,6 +104,8 @@ const closeHelpButton = element<HTMLButtonElement>("close-help");
 
 let identityPath = "";
 let outputDirectory = "";
+let defaultDirectory = "";
+let deviceManager: ReturnType<typeof createDeviceManager>;
 let selectedBackup: Backup | null = null;
 let availableDevices: Device[] = [];
 let devicesLoaded = false;
@@ -122,19 +128,47 @@ const authMethod = (): "key" | "password" => {
   return selected?.value === "password" ? "password" : "key";
 };
 
-const connection = (): Connection => {
+const connection = async (): Promise<Connection> => {
   const host = hostInput.value.trim();
   const port = Number(portInput.value);
   if (!host) throw new Error("Enter the Pi's SSH address.");
+  if (!usernameInput.value.trim()) throw new Error("Enter the SSH username.");
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Enter a valid SSH port.");
-  if (authMethod() === "password" && !passwordInput.value) throw new Error("Enter the SSH password.");
-  return {
-    host,
+  const result: Connection = {
+    host: sshHost(readDeviceDraft()),
     port,
     identity: authMethod() === "key" ? identityPath || undefined : undefined,
-    password: authMethod() === "password" ? passwordInput.value : undefined,
     useDefaultKeys: authMethod() === "key" && !identityPath ? true : undefined,
   };
+  if (authMethod() === "password") result.password = await deviceManager.passwordFor(result);
+  return result;
+};
+
+const readDeviceDraft = (): DeviceDraft => ({
+  username: usernameInput.value, host: hostInput.value, port: Number(portInput.value),
+  authMethod: authMethod(), identity: identityPath, outputDirectory,
+  rememberPassword: element<HTMLInputElement>("remember-password").checked,
+});
+
+const applyDeviceDraft = (draft: DeviceDraft): void => {
+  usernameInput.value = draft.username;
+  hostInput.value = draft.host;
+  portInput.value = String(draft.port);
+  identityPath = draft.identity || "";
+  identityDisplay.textContent = identityPath || "Default SSH key or agent";
+  identityDisplay.title = identityPath;
+  outputDirectory = draft.outputDirectory;
+  outputDisplay.textContent = outputDirectory || "Choose a folder";
+  outputDisplay.title = outputDirectory;
+  document.querySelector<HTMLInputElement>(`input[name="auth-method"][value="${draft.authMethod}"]`)!.checked = true;
+  element<HTMLElement>("key-auth").classList.toggle("hidden", draft.authMethod !== "key");
+  element<HTMLElement>("password-auth").classList.toggle("hidden", draft.authMethod !== "password");
+  element<HTMLInputElement>("remember-password").checked = draft.rememberPassword;
+  passwordInput.value = "";
+  passwordInput.type = "password";
+  togglePasswordButton.textContent = "Show";
+  togglePasswordButton.setAttribute("aria-pressed", "false");
+  resetConnectionStatus();
 };
 
 const updateRestoreAvailability = (): void => {
@@ -144,6 +178,7 @@ const updateRestoreAvailability = (): void => {
 const setBusy = (value: boolean): void => {
   busy = value;
   document.querySelectorAll<HTMLButtonElement>(".action-button").forEach((button) => { button.disabled = value; });
+  backupForm.querySelectorAll<HTMLInputElement>("input").forEach((input) => { input.disabled = value; });
   updateRestoreAvailability();
 };
 
@@ -591,10 +626,10 @@ navigationTabs.forEach((tab, index) => {
   });
 });
 
-document.querySelectorAll<HTMLButtonElement>(".job-filter").forEach((button) => {
+document.querySelectorAll<HTMLButtonElement>("[data-job-filter]").forEach((button) => {
   button.addEventListener("click", () => {
     currentJobFilter = (button.dataset.jobFilter ?? "all") as JobFilter;
-    document.querySelectorAll<HTMLButtonElement>(".job-filter").forEach((filter) => filter.classList.toggle("active", filter === button));
+    document.querySelectorAll<HTMLButtonElement>("[data-job-filter]").forEach((filter) => filter.classList.toggle("active", filter === button));
     renderJobs();
   });
 });
@@ -629,11 +664,17 @@ document.querySelectorAll<HTMLInputElement>('input[name="auth-method"]').forEach
     element<HTMLElement>("key-auth").classList.toggle("hidden", authMethod() !== "key");
     element<HTMLElement>("password-auth").classList.toggle("hidden", authMethod() !== "password");
     passwordInput.value = "";
+    element<HTMLInputElement>("remember-password").checked = false;
     resetConnectionStatus();
+    deviceManager.changed();
   });
 });
 
-[hostInput, portInput, passwordInput].forEach((input) => input.addEventListener("input", resetConnectionStatus));
+[usernameInput, hostInput, portInput, passwordInput].forEach((input) => input.addEventListener("input", () => {
+  resetConnectionStatus();
+  deviceManager.changed();
+}));
+element<HTMLInputElement>("remember-password").addEventListener("change", () => deviceManager.changed());
 
 togglePasswordButton.addEventListener("click", () => {
   const reveal = passwordInput.type === "password";
@@ -651,6 +692,7 @@ element<HTMLButtonElement>("choose-key").addEventListener("click", () => {
     identityDisplay.textContent = path;
     identityDisplay.title = path;
     resetConnectionStatus();
+    deviceManager.changed();
   });
 });
 
@@ -661,27 +703,21 @@ element<HTMLButtonElement>("choose-output").addEventListener("click", () => {
     outputDirectory = path;
     outputDisplay.textContent = path;
     outputDisplay.title = path;
+    deviceManager.changed();
   });
 });
 
 inspectButton.addEventListener("click", () => {
   if (busy || connectionCheck) return;
-  let sourceConnection: Connection;
-  try {
-    sourceConnection = connection();
-  } catch (error) {
-    operation.classList.add("hidden");
-    setConnectionError(error);
-    return;
-  }
   void (async () => {
     setBusy(true);
     operation.classList.add("hidden");
-    setConnectionMessage("Checking connection…");
-    setConnectionCheckActive(true);
-    const request = Service.Inspect(sourceConnection);
-    connectionCheck = request;
     try {
+      const sourceConnection = await connection();
+      setConnectionMessage("Checking connection…");
+      setConnectionCheckActive(true);
+      const request = Service.Inspect(sourceConnection);
+      connectionCheck = request;
       setConnectionStatus(await request);
     } catch (error) {
       if (error instanceof CancelError || (error instanceof Error && error.name === "CancelError")) {
@@ -690,7 +726,7 @@ inspectButton.addEventListener("click", () => {
         setConnectionError(error);
       }
     } finally {
-      if (connectionCheck === request) connectionCheck = null;
+      connectionCheck = null;
       setConnectionCheckActive(false);
       setBusy(false);
     }
@@ -708,7 +744,9 @@ backupForm.addEventListener("submit", (event) => {
   event.preventDefault();
   void runOperation(async () => {
     if (!outputDirectory) throw new Error("Choose a folder for the backup.");
-    let sourceConnection = connection();
+    let sourceConnection = await connection();
+    const profileName = deviceManager.jobProfileName();
+    await Service.ValidateBackupDestination({ connection: sourceConnection, outputDirectory });
     if (authMethod() === "key") {
       setConnectionMessage("Checking disk access…");
       const info = await Service.Inspect(sourceConnection);
@@ -720,8 +758,9 @@ backupForm.addEventListener("submit", (event) => {
         sourceConnection = { ...sourceConnection, sudoPassword };
       }
     }
-    const job = await Service.StartBackup({ connection: sourceConnection, outputDirectory });
+    const job = await Service.StartDeviceBackup({ connection: sourceConnection, outputDirectory }, profileName);
     passwordInput.value = "";
+    deviceManager.changed();
     upsertJob(job);
     switchView("jobs-view");
     openJobDetails(job.id);
@@ -792,6 +831,8 @@ const visibleModal = (): HTMLElement | null => {
 };
 
 document.addEventListener("keydown", (event) => {
+  // Native profile dialogs provide their own focus trap and Escape handling.
+  if (document.querySelector("dialog[open]")) return;
   if (event.key === "Tab") {
     const modal = visibleModal();
     if (!modal) return;
@@ -888,14 +929,26 @@ window.setInterval(() => {
 }, 1000);
 
 void (async () => {
+  deviceManager = createDeviceManager({
+    readDraft: readDeviceDraft, applyDraft: applyDeviceDraft,
+    readPassword: () => passwordInput.value, clearPassword: () => { passwordInput.value = ""; },
+    setPassword: (password) => { passwordInput.value = password; },
+    showBackup: () => switchView("backup-view"), showDevices: () => switchView("devices-view"),
+    showError, isBusy: () => busy, defaultDirectory: () => defaultDirectory, runOperation,
+  });
+  setBusy(true);
   try {
     const [directory, existingJobs] = await Promise.all([Service.DefaultBackupDirectory(), Service.ListJobs()]);
+    defaultDirectory = directory;
     outputDirectory = directory;
     outputDisplay.textContent = outputDirectory;
     outputDisplay.title = outputDirectory;
     for (const job of existingJobs ?? []) upsertJob(job);
     renderJobs();
+    await deviceManager.initialize();
   } catch (error) {
     showError(error);
+  } finally {
+    setBusy(false);
   }
 })();

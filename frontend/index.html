@@ -11,14 +11,21 @@
         <div class="brand" aria-label="Malina">
           <span class="brand-mark"><img src="/raspberries.png" alt=""></span>
           <strong>Malina</strong>
-          <span class="version-badge">v0.1.3</span>
+          <span class="version-badge">v0.2.0</span>
         </div>
         <nav class="tabs" role="tablist" aria-label="Main sections">
           <button id="backup-tab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="backup-view" data-view="backup-view">Backup</button>
           <button id="restore-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="restore-view" data-view="restore-view">Restore</button>
           <button id="jobs-tab" class="tab jobs-tab" type="button" role="tab" aria-selected="false" aria-controls="jobs-view" data-view="jobs-view">Jobs <span id="jobs-count" class="tab-count hidden">0</span></button>
+          <button id="devices-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="devices-view" data-view="devices-view">Devices</button>
         </nav>
-        <button id="help-button" class="help-button" type="button" aria-label="How to use Malina" title="How to use Malina">?</button>
+        <div class="topbar-actions">
+          <button id="selected-profile" class="selected-profile" type="button" title="Browse saved devices">
+            <span id="selected-profile-status">Selected device</span>
+            <strong id="selected-profile-name">Unsaved device</strong>
+          </button>
+          <button id="help-button" class="help-button" type="button" aria-label="How to use Malina" title="How to use Malina">?</button>
+        </div>
       </header>
 
       <main class="workspace">
@@ -36,11 +43,15 @@
                   <h2 id="connection-heading">Source device</h2>
                 </div>
                 <div class="host-grid">
+                  <label class="field username-field">
+                    <span>SSH username</span>
+                    <input id="username" placeholder="pi" required autocomplete="username" spellcheck="false">
+                  </label>
                   <label class="field">
                     <span>Raspberry Pi host</span>
                     <span class="input-with-icon">
                       <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9l3 3-3 3m5 0h4"/></svg>
-                      <input id="host" placeholder="user@host" required autocomplete="off" spellcheck="false">
+                      <input id="host" placeholder="raspberrypi.local" required autocomplete="off" spellcheck="false">
                     </span>
                   </label>
                   <label class="field port-field">
@@ -72,17 +83,33 @@
                     </label>
                     <button id="toggle-password" class="button secondary compact action-button" type="button" aria-pressed="false">Show</button>
                   </div>
+                  <label class="check-row remember-password-row">
+                    <input id="remember-password" type="checkbox">
+                    <span><strong>Remember password securely</strong><small id="saved-password-note">Stored in your system credential store when you save this device.</small></span>
+                  </label>
                 </div>
                 <div class="connection-line">
                   <div id="pi-result" class="connection-status muted-status" role="status">
                     <span class="mini-dot" aria-hidden="true"></span>
                     <span>Test the connection to identify the source disk.</span>
                   </div>
-                  <div class="connection-actions">
-                    <button id="cancel-inspect" class="cancel-inspect hidden" type="button" aria-label="Cancel connection check" title="Cancel connection check"><span aria-hidden="true">×</span> Cancel</button>
-                    <button id="inspect-pi" class="text-button action-button" type="button"><span aria-hidden="true">↻</span> Test connection</button>
+                  <button id="cancel-inspect" class="cancel-inspect hidden" type="button" aria-label="Cancel connection check" title="Cancel connection check"><span aria-hidden="true">×</span> Cancel</button>
+                  <div class="connection-actions" role="group" aria-label="Device configuration actions">
+                    <button id="inspect-pi" class="button secondary compact config-button action-button" type="button" aria-label="Test connection" title="Test connection">
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>Test</span>
+                    </button>
+                    <button id="save-device" class="button secondary compact config-button action-button" type="button">
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H3V3zM7 3v6h10V3M7 21v-8h10v8"/></svg><span id="save-device-label">Save device…</span>
+                    </button>
+                    <button id="save-device-copy" class="button secondary compact config-button action-button hidden" type="button">
+                      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 9h12v12H9zM15 9V3H3v12h6M15 12v6M12 15h6"/></svg><span>Save as new…</span>
+                    </button>
                   </div>
                 </div>
+                <div class="profile-actions">
+                  <button id="discard-device-changes" class="text-button action-button hidden" type="button">Discard changes</button>
+                </div>
+                <p id="device-save-status" class="device-save-status" role="status"></p>
               </section>
 
               <section class="workflow-column destination-column" aria-labelledby="location-heading">
@@ -102,6 +129,28 @@
               <button class="button primary large action-button" type="submit"><span aria-hidden="true">→</span> Start Backup</button>
             </div>
           </form>
+        </section>
+
+        <section id="devices-view" class="view devices-view" role="tabpanel" aria-labelledby="devices-tab" hidden>
+          <div class="page-heading">
+            <h1>Saved Devices</h1>
+            <p>Keep connection details and a backup destination ready for each device.</p>
+          </div>
+          <div class="jobs-toolbar devices-toolbar">
+            <label class="job-search">
+              <span class="sr-only">Search devices</span>
+              <span aria-hidden="true">⌕</span>
+              <input id="device-search" type="search" placeholder="Search devices or folders…">
+            </label>
+            <button id="add-saved-device" class="button primary compact action-button" type="button">Add device</button>
+          </div>
+          <div id="saved-devices-list" class="saved-devices-list"></div>
+          <div id="saved-devices-empty" class="jobs-empty devices-empty">
+            <span class="jobs-empty-icon" aria-hidden="true">⌘</span>
+            <strong>Your devices, ready next time</strong>
+            <span>Configure a connection and backup folder, then choose Save device.</span>
+            <button id="add-first-device" class="button secondary action-button" type="button">Add your first device</button>
+          </div>
         </section>
 
         <section id="jobs-view" class="view jobs-view" role="tabpanel" aria-labelledby="jobs-tab" hidden>
@@ -303,9 +352,43 @@
             <p>To create a backup, enter the Raspberry Pi SSH address, choose an authentication method and destination folder, test the connection, then start the backup.</p>
             <p>To restore, choose a Malina image and removable target drive, then review the erase confirmation carefully.</p>
             <p>Use Jobs to monitor, pause, resume, or cancel operations. Jobs continue when their details are closed.</p>
+            <p>Save a device to remember its connection and backup folder. Use Devices to select, edit, or remove saved configurations. The selected device appears in the upper-right corner.</p>
           </div>
         </section>
       </div>
+
+      <dialog id="save-device-dialog" class="profile-dialog" aria-labelledby="save-device-title" aria-describedby="save-device-description">
+        <form id="save-device-form">
+          <h2 id="save-device-title">Save device</h2>
+          <p id="save-device-description">Remember this connection and backup destination for next time.</p>
+          <label class="field"><span>Device name</span><input id="device-profile-name" required maxlength="100" autocomplete="off"></label>
+          <p id="save-device-error" class="profile-dialog-error" role="alert"></p>
+          <div class="profile-dialog-actions">
+            <button id="cancel-save-device" class="button secondary" type="button">Cancel</button>
+            <button id="confirm-save-device" class="button primary" type="submit">Save device</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="switch-device-dialog" class="profile-dialog" aria-labelledby="switch-device-title">
+        <h2 id="switch-device-title">Save your changes?</h2>
+        <p>Your current device configuration has unsaved changes.</p>
+        <div class="profile-dialog-actions">
+          <button id="cancel-device-switch" class="button secondary" type="button">Cancel</button>
+          <button id="discard-device-switch" class="button secondary" type="button">Discard</button>
+          <button id="save-before-switch" class="button primary" type="button">Save…</button>
+        </div>
+      </dialog>
+
+      <dialog id="delete-device-dialog" class="profile-dialog" aria-labelledby="delete-device-title">
+        <h2 id="delete-device-title">Delete saved device?</h2>
+        <p id="delete-device-copy"></p>
+        <p id="delete-device-error" class="profile-dialog-error" role="alert"></p>
+        <div class="profile-dialog-actions">
+          <button id="cancel-delete-device" class="button secondary" type="button">Cancel</button>
+          <button id="confirm-delete-device" class="button destructive" type="button">Delete device</button>
+        </div>
+      </dialog>
 
       <section id="operation" class="operation hidden" aria-live="polite">
         <div class="operation-copy">

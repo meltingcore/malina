@@ -136,6 +136,10 @@ func (s *Service) finishJob(id string, err error, resultPath string) {
 }
 
 func (s *Service) StartBackup(request core.BackupRequest) (core.Job, error) {
+	return s.startBackup(request, "")
+}
+
+func (s *Service) startBackup(request core.BackupRequest, profileName string) (core.Job, error) {
 	if request.Connection.Host == "" {
 		return core.Job{}, core.NewError("HOST_REQUIRED", "Enter the Pi's SSH address.")
 	}
@@ -143,6 +147,9 @@ func (s *Service) StartBackup(request core.BackupRequest) (core.Job, error) {
 		return core.Job{}, core.NewError("OUTPUT_REQUIRED", "Choose a directory in which to store the backup.")
 	}
 	title := "Remote SD Card Backup — " + request.Connection.Host
+	if profileName != "" {
+		title = "Remote SD Card Backup — " + profileName
+	}
 	managed, ctx, job := s.createJob("backup", title, "Detecting source disk", request.Connection.Host, request.OutputDirectory, "")
 	go func() {
 		defer managed.cancel()

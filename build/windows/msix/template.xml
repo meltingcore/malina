@@ -17,7 +17,7 @@
         PackageDisplayName="Malina"
         PublisherName="CN=meltingcore"
         PublisherDisplayName="Melting Core"
-        Version="0.1.3.0"
+        Version="0.2.0.0"
         PackageDescription="Easy backup and restore for Raspberry Pi">
         <Capabilities>
             <Capability Name="runFullTrust" />

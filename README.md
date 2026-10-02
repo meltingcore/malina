@@ -13,7 +13,8 @@ snapshot—files can change during capture.
 - Go CLI for scripting and headless use
 - Native file and folder pickers for keys, backup locations, and restore images
 - Remote Pi inspection over Malina's bundled SSH client
-- SSH key/agent authentication or an in-memory password
+- SSH key/agent authentication or password authentication
+- Named device profiles
 - Background job queue with pause, resume, cancel, and live details for concurrent backup and
   restore work
 - Full raw-device streaming with `dd`, gzip compression, and SHA-256 checksums
@@ -30,8 +31,10 @@ Password, private-key, and SSH-agent authentication use Malina's bundled Go SSH 
 is attempted in this order: direct read, passwordless `sudo`, then password-backed `sudo`. With SSH
 password authentication, the connection password is reused. With key or agent authentication, the
 app asks for the Pi account password only if the first two access methods fail. If all three methods
-fail, the backup stops with the remote error. Passwords remain in memory only for the active
-operation and are never written to settings, manifests, or logs. Malina remembers first-seen host
+fail, the backup stops with the remote error. Passwords are never written to configuration files,
+manifests, or logs. By default they remain in memory only for the active operation; saved desktop
+devices can explicitly remember SSH passwords in the operating system credential store.
+Separately requested sudo passwords remain temporary. Malina remembers first-seen host
 keys in its user configuration directory and rejects changed keys.
 
 ## Third-party work
@@ -106,7 +109,7 @@ job lifecycle are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Pull requests and updates to `main` run the
 Go and frontend checks automatically. Running the Release workflow for a stable version such as
-`v0.1.0` builds Linux amd64 and arm64, macOS universal, and Windows amd64 archives, generates
+`v0.2.0` builds Linux amd64 and arm64, macOS universal, and Windows amd64 archives, generates
 SHA-256 checksums, and publishes them to a GitHub Release.
 On later runs for the same version, the workflow builds only archives missing from that release,
 keeps existing archives, and updates the checksums for the complete set.

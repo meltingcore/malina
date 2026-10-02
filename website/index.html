@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Back up a Raspberry Pi's physical disk over SSH to a compressed, verified raw image. Restore it to removable media from a desktop app or CLI.">
+    <meta name="description" content="Back up a Raspberry Pi's physical disk over SSH to a compressed, verified raw image. Save device configurations for repeat backups and restore to removable media from a desktop app or CLI.">
     <meta name="theme-color" content="#fbf8f4">
     <meta property="og:title" content="Malina — Raspberry Pi disk backup over SSH">
-    <meta property="og:description" content="Stream a Raspberry Pi disk to a compressed raw image and verify it before restore.">
+    <meta property="og:description" content="Save your Raspberry Pi connection and backup destination, stream a compressed disk image over SSH, and verify it before restore.">
     <meta property="og:type" content="website">
     <title>Malina — Raspberry Pi disk backup over SSH</title>
     <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
@@ -37,10 +37,10 @@
       <section id="top" class="hero shell">
         <div class="hero-copy">
           <a class="release-pill" href="https://github.com/meltingcore/malina/releases" data-release-label>
-            <i></i> Malina v0.1.2 preview is available <b aria-hidden="true">→</b>
+            <i></i> Malina v0.2.0 preview is available <b aria-hidden="true">→</b>
           </a>
           <h1>Raspberry Pi disk backups<br><em>over SSH.</em></h1>
-          <p>Stream the Pi's physical disk to a gzip-compressed raw image on your computer. The partition table, boot sectors, operating system and data are captured and verified with SHA-256.</p>
+          <p>Stream the Pi's physical disk to a gzip-compressed raw image on your computer. The partition table, boot sectors, operating system and data are captured and verified with SHA-256. Save each Pi’s connection and backup folder so they’re ready next time.</p>
           <div class="hero-actions">
             <a class="button primary" href="#download">Install Malina</a>
             <a class="button secondary" href="https://github.com/meltingcore/malina">View on GitHub <span aria-hidden="true">↗</span></a>
@@ -51,7 +51,7 @@
           <div class="product-glow"></div>
           <div class="screenshot-frame hero-frame">
             <div class="frame-top"><span></span><span></span><span></span></div>
-            <img src="assets/screenshots/backup.png" width="1280" height="733" alt="Malina's Backup screen showing SSH authentication and backup destination controls">
+            <img src="assets/screenshots/backup.png" width="1280" height="760" alt="Malina 0.2.0 Backup screen with a selected saved device, SSH settings, and backup destination">
           </div>
           <div class="verified"><span>✓</span><small>Backup integrity</small><b>SHA-256 verified</b></div>
         </div>
@@ -82,8 +82,10 @@
           </article>
           <article class="feature"><span class="number">02</span><span class="feature-icon">#</span><h3>Integrity checked before write</h3><p>Malina validates the manifest and image checksum before it opens a restore destination.</p></article>
           <article class="feature"><span class="number">03</span><span class="feature-icon green">Ⅱ</span><h3>Concurrent job control</h3><p>Track backup and restore progress in one queue, with pause, resume and cancellation controls.</p></article>
+          <article class="feature"><span class="number">04</span><span class="feature-icon" aria-hidden="true">⌘</span><h3>Configure once. Back up again.</h3><p>Save a name, SSH connection and backup folder for each Pi in the desktop app. Search Devices, choose the Pi you need, and pick up with its saved settings. The last selected device is ready when you reopen Malina.</p></article>
+          <article class="feature"><span class="number">05</span><span class="feature-icon green" aria-hidden="true">◇</span><h3>Credentials stay on your computer</h3><p>Use an SSH key, your SSH agent, or a password. Optionally remember passwords in your system credential store. Saved device configurations contain settings and key paths; they never contain passwords or private key contents.</p></article>
           <article class="feature wide dark">
-            <span class="number">04</span>
+            <span class="number">06</span>
             <div><h3>Desktop app and CLI</h3><p>Both interfaces use the same Go backup, verification and restore engine. The CLI emits structured JSON for inspection and scripting.</p></div>
             <pre><code><span>$</span> malina backup \
   --host pi@home \
@@ -100,24 +102,27 @@
         <div class="shell">
           <div class="section-heading centered light">
             <span class="eyebrow">Desktop workflow</span>
-            <h2>Source, destination and<br><em>job state stay visible.</em></h2>
-            <p>The desktop app exposes the same connection, backup, verification and restore operations as the CLI.</p>
+            <h2>Your devices, backups and<br><em>job state stay visible.</em></h2>
+            <p>Save and switch between your Pi configurations in the desktop app, with connection details, backup destinations and background jobs in view.</p>
           </div>
           <div class="showcase-tabs" role="tablist" aria-label="Malina app screenshots">
             <button class="active" type="button" role="tab" aria-selected="true" data-screen="backup"><span>01</span> Backup</button>
             <button type="button" role="tab" aria-selected="false" data-screen="restore"><span>02</span> Restore</button>
             <button type="button" role="tab" aria-selected="false" data-screen="jobs"><span>03</span> Jobs</button>
+            <button type="button" role="tab" aria-selected="false" data-screen="devices"><span>04</span> Devices</button>
           </div>
           <div class="showcase-frame">
             <div class="frame-top"><span></span><span></span><span></span></div>
-            <img class="active" data-screen-image="backup" src="assets/screenshots/backup.png" width="1280" height="733" alt="Malina Backup screen">
-            <img data-screen-image="restore" src="assets/screenshots/restore.png" width="1280" height="733" alt="Malina Restore screen">
-            <img data-screen-image="jobs" src="assets/screenshots/jobs.png" width="1280" height="733" alt="Malina Jobs screen">
+            <img class="active" data-screen-image="backup" src="assets/screenshots/backup.png" width="1280" height="760" alt="Malina Backup screen">
+            <img data-screen-image="restore" src="assets/screenshots/restore.png" width="1280" height="760" alt="Malina Restore screen">
+            <img data-screen-image="jobs" src="assets/screenshots/jobs.png" width="1280" height="760" alt="Malina Jobs screen">
+            <img data-screen-image="devices" src="assets/screenshots/devices.png" width="1280" height="760" alt="Malina Devices screen with searchable saved configurations and Use, Edit, and Delete controls">
           </div>
           <div class="showcase-copy" aria-live="polite">
-            <p class="active" data-screen-copy="backup"><b>Backup:</b> inspect the Pi's disk layout over SSH, select a local output directory, and stream the source device without staging data remotely.</p>
+            <p class="active" data-screen-copy="backup"><b>Backup:</b> load a saved device or configure a new connection, test it over SSH, and save the connection and backup folder together. Stream the source disk with one centered Start Backup action.</p>
             <p data-screen-copy="restore"><b>Restore:</b> select a Malina backup and one of the removable devices discovered by the operating system.</p>
             <p data-screen-copy="jobs"><b>Jobs:</b> inspect, search and filter active or completed backups and restores.</p>
+            <p data-screen-copy="devices"><b>Devices:</b> search saved configurations, choose a Pi, and edit, rename, save a copy, or delete its settings. The header shows the selected device, and unsaved edits are flagged before you switch.</p>
           </div>
         </div>
       </section>

@@ -26,14 +26,37 @@ backup, verification, device-discovery, or restore safety rules.
    discovery failures stop the operation.
 7. Backup directories are claimed atomically. A process only removes the partial directory it
    successfully created; stale or concurrently owned partials are preserved.
-8. Passwords are operation-scoped memory only. They must not appear in manifests, settings, events,
-   logs, or error text.
+8. Passwords must not appear in manifests, configuration files, events, logs, or error text.
+   Operation credentials remain temporary; desktop profiles may explicitly remember SSH passwords
+   in the OS credential store. Separately requested sudo passwords are never persisted.
 9. First-seen SSH host keys are pinned atomically. A changed or concurrent conflicting key is
    rejected.
 
 Hardware serials, WWNs, and media UUIDs are preferred for device identity. Some media does not
 expose a stable identifier; in that case Malina uses the device path and requires its size, model,
 and transport to remain unchanged during the final revalidation window.
+
+## Desktop device profiles
+
+The desktop service owns profiles in `~/.malina.json` (`%USERPROFILE%\.malina.json` on Windows).
+The versioned file stores stable device IDs, display names, explicit SSH users/hosts/ports,
+authentication methods, key paths, local backup folders, and the last selected device ID.
+Private-key contents and passwords never enter this file. The core engine and CLI do not read it.
+
+Profile operations are serialized, reload and validate the entire file before changing it, and
+write via a user-only temporary file, flush, and atomic rename. Malformed, unknown-version, or
+unsupported configurations are preserved. Loading does not read credentials or contact a host.
+
+Optional SSH passwords live in the OS credential store under opaque references. Retrieval is
+bound to the profile's username, host, port, and password authentication method. An edited account
+cannot reuse the old password. Credential replacements and profile copies use independent entries;
+failed file writes remove new entries and attempt to restore any replaced credential. Disabling
+remembering or deleting a profile removes its credential; a locked store fails the change so the
+reference remains available for retry. Errors shown to the frontend omit provider error details.
+
+The UI retains a saved baseline to identify unsaved edits and guards profile switching. Jobs receive
+a copy of their settings and display name when submitted and never consult the profile afterward.
+Restore-image and physical-target selections are independent of device-profile selection.
 
 ## Backup commit protocol
 
