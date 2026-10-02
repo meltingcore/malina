@@ -50,7 +50,7 @@ Development computer:
 
 - Go 1.25 or newer
 - Node.js 20.19 or newer and pnpm
-- Wails v3 CLI (the project is pinned to `v3.0.0-beta.23`)
+- Wails v3 CLI (the project is pinned to `v3.0.0-beta.26`)
 - Platform build tools required by Wails
 
 Raspberry Pi:

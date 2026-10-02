@@ -8,6 +8,10 @@
   in a single file. This allows for easier management of multiple Raspberry Pi devices and their
   respective backup settings.
 
+### Fixes
+
+- Dependabot version updates 
+
 ## [0.1.3]
 
 ### Fixes
