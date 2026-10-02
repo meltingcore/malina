@@ -3,7 +3,7 @@ module github.com/meltingcore/malina
 go 1.26.0
 
 require (
-	github.com/wailsapp/wails/v3 v3.0.0-beta.23
+	github.com/wailsapp/wails/v3 v3.0.0-beta.26
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.57.0
 	golang.org/x/term v0.46.0
